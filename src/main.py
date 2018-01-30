@@ -16,12 +16,12 @@ MARKERS = ['wu', 'wd', 'wl', 'wr',
 MAPPING = {marker: i for i, marker in enumerate(MARKERS)}
 
 
-def load_quadrants(path="quadrants.yaml"):
+def load_quadrants(path="../config/quadrants.yaml"):
     """ 
     Loads the quadrants yaml and automatically populates center/edge walls
     Returns the quadrants as a dictionary by color
     """
-    with open("quadrants.yaml") as f:
+    with open(path) as f:
         quadrants = yaml.load(f)
 
     for color in sorted(quadrants):
@@ -71,8 +71,14 @@ def create_board(quadrants, include_black_robot=False):
     Prepare a board from a random select of each color's quadrant
     """
 
-    board = {'targets': {}, 'hwalls': [], 'vwalls': [], 'robots': {}, 'order': [], 'turn': 0,
-             'grid': np.zeros((16, 16), dtype=np.int64)}
+    board = {'targets': {}, # each target and its location on board
+             'hwalls': [], # locations of horizontal walls
+             'vwalls': [], # locations of vertical walls
+             'robots': {}, # each robot and its location on board
+             'order': [], # shuffled target names for order to solve
+             'turn': 0, # current turn number
+             'moves': [], # moves to solve each subsequent target in order
+             'grid': np.zeros((16, 16), dtype=np.int64)} # targets/walls/robots for calculations
     # Prepare a random order of colors
     colors = ['red', 'blue', 'green', 'yellow']
     random.shuffle(colors)
@@ -163,7 +169,6 @@ def solve(board):
     target_x, target_y = board['targets'][current_target]
     target_color = current_target[0]
     solution = descend(grid, robots, (target_x, target_y, target_color))
-    # TODO complete moves in solution
     print(len(solution))
     board['turn'] += 1
 
@@ -175,4 +180,3 @@ if __name__ == "__main__":
     plot_board(board)
     while board['turn'] < len(board['order']):
         solve(board)
-
