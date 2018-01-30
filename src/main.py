@@ -6,39 +6,15 @@ import numpy as np
 import random
 import yaml
 
-random.seed(0)
-np.random.seed(0)
+MARKERS = ['wu', 'wd', 'wl', 'wr',
+           'b', 'g', 'r', 'y', 
+           'bh', 'bo', 'bs', 'bv',
+           'gh', 'go', 'gs', 'gv',
+           'rh', 'ro', 'rs', 'rv',
+           'yh', 'yo', 'ys', 'yv',
+           'kp', 'kx']
+MAPPING = {marker: i for i, marker in enumerate(MARKERS)}
 
-mapping = {'wu': 0,
-           'wd': 1,
-           'wl': 2,
-           'wr': 3,
-           'b': 4,
-           'g': 5,
-           'r': 6,
-           'y': 7,
-           'kp': 8,
-           'bh': 9,
-           'bo': 10,
-           'bs': 11,
-           'bv': 12,
-           'gh': 13,
-           'go': 14,
-           'gs': 15,
-           'gv': 16,
-           'rh': 17,
-           'ro': 18,
-           'rs': 19,
-           'rv': 20,
-           'yh': 21,
-           'yo': 22,
-           'ys': 23,
-           'yv': 24,
-           'b.': 25,
-           'g.': 26,
-           'r.': 27,
-           'y.': 28,
-}
 
 def load_quadrants(path="quadrants.yaml"):
     """ 
@@ -50,12 +26,10 @@ def load_quadrants(path="quadrants.yaml"):
 
     for color in sorted(quadrants):
         for quadrant in quadrants[color]:
-            quadrant['targets']['%s.' % color[0]] = [0, 0]
             quadrant['hwalls'].append([0, 1])
             quadrant['vwalls'].append([1, 0])
-            for i in range(8):
-                quadrant['hwalls'].append([i, 8])
-                quadrant['vwalls'].append([8, i])
+            quadrant['hwalls'].extend([[i, 8] for i in range(8)])
+            quadrant['vwalls'].extend([[8, i] for i in range(8)])
     return quadrants
 
 
@@ -136,33 +110,31 @@ def create_board(quadrants, include_black_robot=False):
                 board[target].append(new_xy)
 
     # Prepare grid of board
+    board['grid'][7:9, 7:9] = MAPPING['kx'] # do not include center tiles
     for target in board['targets']:
         x, y = board['targets'][target]
-        board['grid'][y, x] |= 1 << mapping[target]
+        board['grid'][y, x] |= 1 << MAPPING[target]
     for x, y in board['hwalls']:
         if y < 16:
-            board['grid'][y, x] |= 1 << mapping['wu']
+            board['grid'][y, x] |= 1 << MAPPING['wu']
         if y > 0:
-            board['grid'][y-1, x] |= 1 << mapping['wd']
+            board['grid'][y-1, x] |= 1 << MAPPING['wd']
     for x, y in board['vwalls']:
         if x < 16:
-            board['grid'][y, x] |= 1 << mapping['wl']
+            board['grid'][y, x] |= 1 << MAPPING['wl']
         if x > 0:
-            board['grid'][y, x-1] |= 1 << mapping['wr']
+            board['grid'][y, x-1] |= 1 << MAPPING['wr']
 
     # Populate robots in random positions not on a target
     if include_black_robot:
         colors.append('k')
     for color in colors:
-        # Find available location
         x, y = 8, 8
-        while board['grid'][y, x] << 4:
+        while board['grid'][y, x] >> 4:
             x, y = np.random.randint(16, size=2)
-
-        # Place robot on both grid and robots
         robot = color[0]
         xy = np.array([x, y], dtype=np.int64)
-        board['grid'][y][x] |= 1 << mapping[robot]
+        board['grid'][y][x] |= 1 << MAPPING[robot]
         board['robots'][robot] = xy
 
     # Shuffle order to simulate picking random targets
@@ -197,9 +169,10 @@ def solve(board):
 
 
 if __name__ == "__main__":
+    # Play a game on the given board
     quadrants = load_quadrants()
     board = create_board(quadrants)
     plot_board(board)
-    #while board['turn'] < len(board['order']):
-    solve(board)
+    while board['turn'] < len(board['order']):
+        solve(board)
 
