@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 import argparse
-from copy import copy
+from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -14,6 +14,9 @@ class Piece:
         self.xy = np.array([x, y], dtype=np.int)
 
     def __str__(self):
+        return "(%s,%i,%i)" % (self.name, self.x, self.y)
+
+    def __repr__(self):
         return "(%s,%i,%i)" % (self.name, self.x, self.y)
 
     def rename(self, name):
@@ -43,6 +46,7 @@ class Board:
         # Things that should be arguments
         self.__include_black_robot = False
         self.__quadrant_path = "../config/quadrants.yaml"
+        self.__max_depth = 5
 
         # Initialize rest of program
         self.__colors = ['red', 'blue', 'green', 'yellow']
@@ -146,6 +150,7 @@ class Board:
             except:
                 pass
 
+
     def __populate_robots(self):
 
         # Populate robots in random positions not on a target
@@ -164,30 +169,66 @@ class Board:
             self.__grid[y, x] |= 1 << self.__piece_bits[robot.name]
 
 
-    def destinations(self, grid, robot):
-        pass
-
-    def descend(self, grid, robots, target, move=None, counter=0):
+    def descend(self, grid, robots, target_color, target_x, target_y, move=None, counter=0):
         """
         Try recursively moving each robot in one of their directions to get to the target
         """
-        if counter >= 8:
+        if counter >= self.__max_depth:
             return None
 
-        return []
+        # If we were asked to make a move, do it
+        if move is not None:
+            robot_color, src_x, src_y, dst_x, dst_y = move
+
+            # If we didn't move, return None
+            if src_x == dst_x and src_y == dst_y:
+                return None
+            
+            # if we've found the solution return it
+            if robot_color == target_color and target_x == dst_x and target_y == dst_y:
+                return [move]
+            
+            # Move the robot by reseting the grid and updating the robots variable
+            robot_bit = 1 << self.__piece_bits[robot_color]
+            grid[src_y, src_x] &= robot_bit ^ 511
+            grid[dst_y, src_x] |= robot_bit
+            for robot in robots:
+                if robot.name == robot_color:
+                    robot.move(dst_x, dst_y)
+                    
+        # Find possible paths recursively
+        outs = []
+        for robot in robots:
+            for i, func in enumerate([self.get_left_destination, self.get_down_destination,
+                                      self.get_right_destination, self.get_up_destination]):
+                dst_x, dst_y = func(grid, robot.x, robot.y)
+
+                next_move = [robot.name, robot.x, robot.y, dst_x, dst_y]
+                out = self.descend(grid.copy(), deepcopy(robots), target_color,
+                                   target_x, target_y, next_move, counter + 1)
+                if out is not None:
+                    outs.append(out)
+
+        # Return the shortest path that we find
+        min_out_n = self.__max_depth
+        min_out_val = None
+        for out in outs:
+            if len(out) < min_out_n:
+                min_out_n = len(out)
+                min_out_val = ([move] if move else []) + out
+        return min_out_val
 
 
     def solve(self):
         """
         Calls descend recursively until a solution is found
         """
-        grid = self.__board['grid'] & 511 # only store walls and robots
-        current_target = self.__board['order'][self.__board['turn']]
-        robots = copy(self.__board['robots'])
-        target_color = current_target.name[0]
-        target_x, target_y = self.__board['targets'][current_target]
-        solution = self.descend(grid, robots, (target_color, target_x, target_y))
-        print(len(solution))
+        grid = self.__grid & 511 # only store walls and robots
+        target = self.__targets[self.__turn]
+        target_color = target.name[0]
+        robots = deepcopy(self.__robots)
+        solution = self.descend(grid, robots, target_color, target.x, target.y)
+        print(solution)
         self.__turn += 1
 
 
@@ -195,7 +236,35 @@ class Board:
         return self.__targets[self.__turn]
 
 
-    def plot(self):
+    def get_left_destination(self, grid, x, y):
+        wall = 1 << self.__piece_bits['wr']
+        while x > 0 and grid[y, x - 1] & wall == 0 and grid[y, x - 1] >> 4 == 0:
+            x -= 1
+        return x, y 
+
+
+    def get_right_destination(self, grid, x, y):
+        wall = 1 << self.__piece_bits['wl']
+        while x < 15 and grid[y, x + 1] & wall == 0 and grid[y, x + 1] >> 4 == 0:
+            x += 1
+        return x, y 
+
+
+    def get_up_destination(self, grid, x, y):
+        wall = 1 << self.__piece_bits['wd']
+        while y > 0 and grid[y - 1, x] & wall == 0 and grid[y - 1, x] >> 4 == 0:
+            y -= 1
+        return x, y 
+
+
+    def get_down_destination(self, grid, x, y):
+        wall = 1 << self.__piece_bits['wu']
+        while y < 15 and grid[y + 1, x] & wall == 0 and grid[y + 1, x] >> 4 == 0:
+            y += 1
+        return x, y 
+
+
+    def plot(self, name='board'):
         fig = plt.gcf()
         fig.set_size_inches(10, 10)
         plt.axis([0, 16, 16, 0])
@@ -220,7 +289,7 @@ class Board:
                 raise ValueError("Not a wall [%s]" % wall.name)
         plt.plot(8, 8, current_target.name, ms=64)
 
-        plt.savefig('board.png', bbox_inches='tight', dpi=100)
+        plt.savefig('%s.png' % name, bbox_inches='tight', dpi=100)
         plt.close()
 
 
@@ -237,4 +306,6 @@ if __name__ == "__main__":
 
     # Play a game on the given board
     b = Board()
-    b.plot()
+    b.plot('board0')
+    b.solve()
+    b.plot('board1')
