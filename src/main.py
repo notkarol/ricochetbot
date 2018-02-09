@@ -11,22 +11,21 @@ import ricochet
 
 class Board:
 
-    def __init__(self, include_black_robot=True,
-                 quadrant_path="../config/quadrants.yaml",
-                 max_depth=5):
+    def __init__(self, max_depth=8, include_black_robot=True,
+                 quadrant_path="../config/quadrants.yaml"):
         # Handle Arguments
         self.__include_black_robot = include_black_robot
         self.__quadrant_path = quadrant_path
         self.__max_depth = max_depth
 
         # Initialize rest of class variables
-        self.__colors = ['r', 'b', 'g', 'y', 'k']
+        self.__markers = ricochet.markers()
+        self.__colors = self.__markers[4:9]
         self.__shapes = ['o', 'v', 's', 'h', 'p']
         self.__targets = np.zeros((17, 4), dtype=np.int64)
         self.__robots = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int64)
         self.__grid = np.zeros((16, 16), dtype=np.int64)
         self.__turn = 0
-        self.__markers = ricochet.markers()
 
         # Prepare board
         self.__load_quadrants()
@@ -138,12 +137,11 @@ class Board:
         return self.__turn
 
     def done(self):
-        return self.__turn < len(self.__targets)
+        return self.__turn >= len(self.__targets)
 
     def solve(self):
         color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
         solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y, self.__max_depth)
-        print(solution)
         self.__turn += 1
 
     def plot(self, save_name='board'):
@@ -185,13 +183,18 @@ class Board:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=-1)
+    parser.add_argument("--max", type=int, default=6)
     args = parser.parse_args()
 
     if args.seed >= 0:
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    b = Board()
-    b.plot('board0')
-    b.solve()
-    b.plot('board1')
+    b = Board(args.max)
+    b.plot('board00')
+    counter = 0
+    while not b.done():
+        counter += 1
+        b.solve()
+        b.plot('board%02i' % counter)
+
