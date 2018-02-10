@@ -11,8 +11,7 @@ import ricochet
 
 class Board:
 
-    def __init__(self, max_depth=8, include_black_robot=False,
-                 quadrant_path="../config/quadrants.yaml"):
+    def __init__(self, max_depth, include_black_robot, quadrant_path):
         # Handle Arguments
         self.__include_black_robot = include_black_robot
         self.__quadrant_path = quadrant_path
@@ -165,11 +164,11 @@ class Board:
             if i == self.__turn:
                 alpha = 1
                 plt.plot(8, 8, name, ms=64)
-            plt.plot(x + 0.5, y + 0.5, name, alpha=alpha, ms=32)
+            plt.plot(x + 0.5, y + 0.5, name, alpha=alpha, ms=32, markeredgecolor='grey')
 
         # Robots
         for i, (x, y) in enumerate(self.__robots):
-            plt.plot(x + 0.5, y + 0.5, self.__colors[i] + '*', ms=24)
+            plt.plot(x + 0.5, y + 0.5, self.__colors[i] + '*', ms=24, markeredgecolor='grey')
 
         # Walls
         for y in range(16):
@@ -203,14 +202,16 @@ class Board:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=-1)
-    parser.add_argument("--max", type=int, default=6)
+    parser.add_argument("--max", type=int, default=8)
+    parser.add_argument("--black", action="store_true")
+    parser.add_argument("--path", type=str, default="../config/quadrants.yaml")
     args = parser.parse_args()
 
     if args.seed >= 0:
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    b = Board(args.max)
+    b = Board(args.max, args.black, args.path)
     counter = 0
     while not b.done():
         print("Solving", counter)        
