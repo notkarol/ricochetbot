@@ -5,12 +5,13 @@
 #include <stdlib.h>
 
 typedef struct move_t {
-  int64_t robot_i;
+  int64_t robot;
   int64_t action;
   int64_t src_x;
   int64_t src_y;
   int64_t dst_x;
   int64_t dst_y;
+  int64_t robot_order_i;
 } move_t;
 
 static const char *MARKERS[35] = {"wu", "wd", "wl", "wr", "b", "g", "r", "y", "k",
@@ -31,90 +32,85 @@ static int64_t MOVE_UP = 0;
 static int64_t MOVE_LEFT = 1;
 static int64_t MOVE_DOWN = 2;
 static int64_t MOVE_RIGHT = 3;
+static int64_t N_ACTIONS = 4;
+static int64_t GRID_WIDTH = 16;
 
-
-static int64_t left(const int64_t* grid, int64_t robot,
-		    int64_t src_x, int64_t src_y,
+static int64_t left(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
 		    int64_t* dst_x, int64_t* dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_x > 0 && (grid[(*dst_y) * 16 + (*dst_x - 1)] & BLOCK_LEFT) == 0) {
+  while (*dst_x > 0 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & BLOCK_LEFT) == 0) {
     (*dst_x)--;
   }
   return src_x == *dst_x;
 }
 
-static int64_t up(const int64_t* grid, int64_t robot,
-		  int64_t src_x, int64_t src_y,
+static int64_t up(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
 		  int64_t* dst_x, int64_t* dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_y > 0 && (grid[(*dst_y - 1) * 16 + (*dst_x)] & BLOCK_UP) == 0) {
+  while (*dst_y > 0 && (grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & BLOCK_UP) == 0) {
     (*dst_y)--;
   }
   return src_y == *dst_y;
 }
 
-static int64_t right(const int64_t* grid, int64_t robot,
-		     int64_t src_x, int64_t src_y,
+static int64_t right(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
 		     int64_t* dst_x, int64_t* dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_x < 15 && (grid[(*dst_y) * 16 + (*dst_x + 1)] & BLOCK_RIGHT) == 0) {
+  while (*dst_x < 15 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & BLOCK_RIGHT) == 0) {
     (*dst_x)++;
   }
   return src_x == *dst_x;
 }
 
-static int64_t down(const int64_t* grid, int64_t robot,
-		    int64_t src_x, int64_t src_y,
+static int64_t down(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
 		    int64_t* dst_x, int64_t* dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_y > 0 && (grid[(*dst_y + 1) * 16 + (*dst_x)] & BLOCK_DOWN) == 0) {
+  while (*dst_y > 0 && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & BLOCK_DOWN) == 0) {
     (*dst_y)++;
   }
   return src_y == *dst_y;
 }
 
-
 static int64_t move_robot(int64_t *grid, int64_t *robots, move_t *move) {
+
   // Find an available move
-  move->src_x = robots[move->robot_i * 2];
-  move->src_y = robots[move->robot_i * 2 + 1];
   int64_t rc = -1;
+  move->src_x = robots[move->robot * 2];
+  move->src_y = robots[move->robot * 2 + 1];
   if (move->action == MOVE_UP) {
-    rc = up(grid, move->robot_i, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
+    rc = up(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   } else if (move->action == MOVE_LEFT) {
-    rc = left(grid, move->robot_i, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
+    rc = left(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   } else if (move->action == MOVE_DOWN) {
-    rc = down(grid, move->robot_i, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
+    rc = down(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   } else if (move->action == MOVE_RIGHT) {
-    rc = right(grid, move->robot_i, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
+    rc = right(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   }
   if (rc) {
     return rc;
   }
-  
-  int64_t robot_writer = 1 << (ROBOT_OFFSET + move->robot_i);
-  int64_t robot_eraser = ~robot_writer;  
-  grid[move->src_y * 16 + move->src_x] &= robot_eraser;
-  grid[move->dst_y * 16 + move->dst_x] |= robot_writer;
 
-  grid[move->src_y * 16 + move->src_x] &= robot_eraser;
-  grid[move->dst_y * 16 + move->dst_x] |= robot_writer;
-  robots[move->robot_i * 2] = move->dst_x;
-  robots[move->robot_i * 2 + 1] = move->dst_y;
+  // If the move results in a new location, do it
+  int64_t robot_writer = 1 << (ROBOT_OFFSET + move->robot);
+  int64_t robot_eraser = ~robot_writer;  
+  grid[move->src_y * GRID_WIDTH + move->src_x] &= robot_eraser;
+  grid[move->dst_y * GRID_WIDTH + move->dst_x] |= robot_writer;
+  robots[move->robot * 2] = move->dst_x;
+  robots[move->robot * 2 + 1] = move->dst_y;
   return 0;
 }
 
 static void unmove_robot(int64_t *grid, int64_t *robots, move_t* move) {
-  int64_t robot_writer = 1 << (ROBOT_OFFSET + move->robot_i);
+  int64_t robot_writer = 1 << (ROBOT_OFFSET + move->robot);
   int64_t robot_eraser = ~robot_writer;
-  grid[move->dst_y * 16 + move->dst_x] &= robot_eraser;
-  grid[move->src_y * 16 + move->src_x] |= robot_writer;
-  robots[move->robot_i * 2] = move->src_x;
-  robots[move->robot_i * 2 + 1] = move->src_y;
+  grid[move->dst_y * GRID_WIDTH + move->dst_x] &= robot_eraser;
+  grid[move->src_y * GRID_WIDTH + move->src_x] |= robot_writer;
+  robots[move->robot * 2] = move->src_x;
+  robots[move->robot * 2 + 1] = move->src_y;
 }
 
 
@@ -153,94 +149,115 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 			&target_x, &target_y, &max_depth))
     return NULL;
 
-  // Prepare Grid
+  // Extract the grid data so that we can manipulate it in our search
   int64_t* grid = PyArray_DATA(grid_obj);
-  int64_t n_actions = 4;
   
-  // Initialize robots
+  // Extract the robots array so we can manipulate it in our search
   int64_t* robots = PyArray_DATA(robots_obj);
   int64_t n_robots = PyArray_DIM(robots_obj, 0);
 
-  // Initialize moves
-  move_t moves[max_depth];
-  moves[0].robot_i = 0;
+  // Robot order is a heuristic optimization that will always search for solutions that
+  // move the target robot. So initialize it, and then do moves for the other robots
+  int64_t robot_order[n_robots];
+  robot_order[0] = (target_robot == 4 ? n_robots - 1 : target_robot);
+  for (int i = 0; i < n_robots; ++i) {
+    if (i != target_robot) {
+      robot_order[i + (i < target_robot)] = i;
+    }
+  }
+  for (int i = 0; i < n_robots; ++i) {
+    printf("%i %li\n", i, robot_order[i]);
+  }
+
+  // Initialize moves arrays to store the progress we make and the shortest solution
+  move_t moves[max_depth + 1], out_moves[max_depth + 1];
+  int64_t n_moves = 0, n_out_moves = -1;
+  moves[0].robot = target_robot;
   moves[0].action = -1;
-  int64_t n_moves = 0;
+  moves[0].robot_order_i = 0;
 
-  /* moves[n_moves].robot_i = 2; */
-  /* moves[n_moves].action = MOVE_UP; */
-  /* move_robot(grid, robots, &(moves[n_moves])); */
-  /* n_moves++; */
-  
-  /* moves[n_moves].robot_i = 3; */
-  /* moves[n_moves].action = MOVE_LEFT; */
-  /* move_robot(grid, robots, &(moves[n_moves])); */
-  /* n_moves++; */
-
-  /* moves[n_moves].robot_i = 3; */
-  /* moves[n_moves].action = MOVE_UP; */
-  /* move_robot(grid, robots, &(moves[n_moves])); */
-  /* n_moves++; */
-
-  /* moves[n_moves].robot_i = 3; */
-  /* moves[n_moves].action = MOVE_RIGHT; */
-  /* move_robot(grid, robots, &(moves[n_moves])); */
-  /* n_moves++; */
-  
-
-  // Try every combination
+  // Dive depth-first to try every combination of moves
+  int64_t solution_found = 0;
   while (n_moves >= 0) {
+
     // If we're beyond our depth or out of robots/actions to try for this combination, go back
     if (n_moves >= max_depth) {
-      n_moves--;
-      if (n_moves < 0)
-	break;
-      unmove_robot(grid, robots, &(moves[n_moves]));
-      continue;
-    }
-
+      if (n_moves > 0) {
+	unmove_robot(grid, robots, &(moves[--n_moves]));
+	continue;
+      }
+      break;
+    }    
+    
     // Verify a robot-action pair isn't out of bounds
     moves[n_moves].action++;
-    if (moves[n_moves].action >= n_actions) {
-      moves[n_moves].robot_i++;
+    if (moves[n_moves].action >= N_ACTIONS) {
+      moves[n_moves].robot = robot_order[moves[n_moves].robot_order_i];
       moves[n_moves].action = 0;
+      moves[n_moves].robot_order_i++;
     }
     
     // If we're out of moves, go back
-    if (moves[n_moves].robot_i >= n_robots) {
-      n_moves--;
-      if (n_moves < 0)
-	break;
-      unmove_robot(grid, robots, &(moves[n_moves]));
+    if (moves[n_moves].robot_order_i >= n_robots) {
+      if (--n_moves >= 0) unmove_robot(grid, robots, &(moves[n_moves]));
       continue;
     }
 
     // Try to move, if we can't skip
     if (move_robot(grid, robots, &(moves[n_moves])))
       continue;
-
-    // Update for a successful move
     n_moves++;
-    moves[n_moves].robot_i = 0;
-    moves[n_moves].action = -1;
 
     // If we're done, print it
-    if (robots[target_robot * 2] == target_x && robots[target_robot * 2 + 1] == target_y) {
-      printf("Found a solution [%li]\n", n_moves);
-      for (int i = 0; i < n_moves; ++i) {
-	printf("%li %li %li\n", i, moves[i].robot_i, moves[i].action);
+    if (target_robot < 4) {
+      solution_found = (robots[target_robot * 2] == target_x
+			&& robots[target_robot * 2 + 1] == target_y);
+    }
+    else {
+      for (int i = 0; i < n_robots; ++i) {
+	solution_found |= robots[i * 2] == target_x && robots[i * 2 + 1] == target_y;
       }
+    }
+
+    // If we found a solution, save it
+    if (solution_found) {
+      solution_found = 0;
+      printf("Found a solution [%li]\n", n_moves);
+
+      // Store the shortest solution
+      if (n_out_moves < 0 || n_moves < n_out_moves) {
+	n_out_moves = n_moves;
+	memcpy(&out_moves, &moves, n_out_moves * sizeof(move_t));
+      }
+
+      // Update the acceptable depth
       max_depth = n_moves - 1;
-      n_moves--;
-      if (n_moves < 0)
-	break;
-      unmove_robot(grid, robots, &(moves[n_moves]));
       continue;
-    }    
+    }
+    
+    moves[n_moves].robot_order_i = 0;
+    moves[n_moves].robot = robot_order[moves[n_moves].robot_order_i];
+    moves[n_moves].action = -1;    
   }
 
-  // Store output and return number of moves
-  return Py_BuildValue("l", n_moves);
+  // If we didn't find anything, do None
+  if (n_out_moves < 0) {
+    return Py_BuildValue("");
+  }
+
+  // Build output
+  PyObject *moves_list = PyList_New(n_out_moves);
+  for (int64_t i = 0; i < n_out_moves; i++) {
+    PyObject *move_list = PyList_New(5);
+    PyList_SetItem(move_list, 0, Py_BuildValue("i", out_moves[i].robot));
+    PyList_SetItem(move_list, 1, Py_BuildValue("i", out_moves[i].src_x));
+    PyList_SetItem(move_list, 2, Py_BuildValue("i", out_moves[i].src_y));
+    PyList_SetItem(move_list, 3, Py_BuildValue("i", out_moves[i].dst_x));
+    PyList_SetItem(move_list, 4, Py_BuildValue("i", out_moves[i].dst_y));
+    PyList_SetItem(moves_list, i, move_list);
+  }
+  return moves_list;
+  
 }
 
 static struct PyMethodDef module_methods[] = {

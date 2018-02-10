@@ -11,7 +11,7 @@ import ricochet
 
 class Board:
 
-    def __init__(self, max_depth=8, include_black_robot=True,
+    def __init__(self, max_depth=8, include_black_robot=False,
                  quadrant_path="../config/quadrants.yaml"):
         # Handle Arguments
         self.__include_black_robot = include_black_robot
@@ -25,6 +25,7 @@ class Board:
         self.__targets = np.zeros((17, 4), dtype=np.int64)
         self.__robots = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int64)
         self.__grid = np.zeros((16, 16), dtype=np.int64)
+        self.__solution = []
         self.__turn = 0
 
         # Prepare board
@@ -46,9 +47,6 @@ class Board:
                 quadrant.append(['wv', 1, 0])
                 quadrant.extend([['wh', i, 8] for i in range(8)])
                 quadrant.extend([['wv', 8, i] for i in range(8)])
-
-    def __is_robot(self, name):
-        return len(name) == 1 and name[0] in self.__colors
 
     def __is_target(self, name):
         return len(name) == 2 and name[0] in self.__colors and name[1] in self.__shapes
@@ -117,6 +115,8 @@ class Board:
                             self.__grid[y, x - 1] |= 1 << self.__markers.index('wr')
                 elif self.__is_redirect(name):
                     raise NotImplementedError("Reflectors are not yet implemented")
+
+        # Make sure targets are not in predictable order
         np.random.shuffle(self.__targets)
 
     def __populate_robots(self):
@@ -133,16 +133,17 @@ class Board:
             self.__robots[i, :] = (x, y)
             self.__grid[y, x] |= 1 << self.__markers.index(self.__colors[i])
 
-    def turn(self):
-        return self.__turn
-
     def done(self):
         return self.__turn >= len(self.__targets)
 
+    def next(self):
+        self.__turn += 1
+    
     def solve(self):
         color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
-        solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y, self.__max_depth)
-        self.__turn += 1
+        self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
+                                         self.__max_depth)
+        print(self.__solution)
 
     def plot(self, save_name='board'):
         fig = plt.gcf()
@@ -168,14 +169,19 @@ class Board:
         # Walls
         for y in range(16):
             for x in range(16):
-                if self.__grid[y, x] & 1 << 0: # up
+                if self.__grid[y, x] & 1 << self.__markers.index('wu'):
                     plt.plot([x, x + 1], [y, y], lw=4, color='gray')    
-                if self.__grid[y, x] & 1 << 1: # down
+                if self.__grid[y, x] & 1 << self.__markers.index('wd'):
                     plt.plot([x, x + 1], [y + 1, y + 1], lw=4, color='gray')    
-                if self.__grid[y, x] & 1 << 2: # left
+                if self.__grid[y, x] & 1 << self.__markers.index('wl'):
                     plt.plot([x, x], [y, y + 1], lw=4, color='gray')
-                if self.__grid[y, x] & 1 << 3: # right
+                if self.__grid[y, x] & 1 << self.__markers.index('wr'):
                     plt.plot([x + 1, x + 1], [y, y + 1], lw=4, color='gray')
+
+        if self.__solution:
+            for robot_i, src_x, src_y, dst_x, dst_y in self.__solution:
+                plt.plot([src_x + 0.5, dst_x+ 0.5], [src_y + 0.5, dst_y + 0.5],
+                         self.__colors[robot_i], lw=4)
 
         plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100)
         plt.close()
@@ -191,10 +197,11 @@ if __name__ == "__main__":
         np.random.seed(args.seed)
 
     b = Board(args.max)
-    b.plot('board00')
     counter = 0
     while not b.done():
-        counter += 1
+        print("Solving", counter)
         b.solve()
         b.plot('board%02i' % counter)
+        b.next()
+        counter += 1
 

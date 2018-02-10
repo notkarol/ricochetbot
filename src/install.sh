@@ -2,5 +2,10 @@
 
 rm -rf build
 ./setup.py build
-./setup.py install --user
-python3 -c 'import ricochet'
+rc=$?
+if [[ "$rc" ==  "0" ]]
+then
+    ./setup.py install --user
+    rc=$?
+fi
+exit $rc
