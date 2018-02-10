@@ -5,13 +5,13 @@
 #include <stdlib.h>
 
 typedef struct move_t {
+  int64_t robot_order_i;
   int64_t robot;
   int64_t action;
   int64_t src_x;
   int64_t src_y;
   int64_t dst_x;
   int64_t dst_y;
-  int64_t robot_order_i;
 } move_t;
 
 static const char *MARKERS[35] = {"wu", "wd", "wl", "wr", "b", "g", "r", "y", "k",
@@ -69,7 +69,7 @@ static int64_t down(const int64_t* grid, int64_t robot, int64_t src_x, int64_t s
 		    int64_t* dst_x, int64_t* dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_y > 0 && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & BLOCK_DOWN) == 0) {
+  while (*dst_y < 15 && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & BLOCK_DOWN) == 0) {
     (*dst_y)++;
   }
   return src_y == *dst_y;
@@ -81,6 +81,7 @@ static int64_t move_robot(int64_t *grid, int64_t *robots, move_t *move) {
   int64_t rc = -1;
   move->src_x = robots[move->robot * 2];
   move->src_y = robots[move->robot * 2 + 1];
+  
   if (move->action == MOVE_UP) {
     rc = up(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   } else if (move->action == MOVE_LEFT) {
@@ -90,6 +91,7 @@ static int64_t move_robot(int64_t *grid, int64_t *robots, move_t *move) {
   } else if (move->action == MOVE_RIGHT) {
     rc = right(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
   }
+    
   if (rc) {
     return rc;
   }
@@ -103,6 +105,7 @@ static int64_t move_robot(int64_t *grid, int64_t *robots, move_t *move) {
   robots[move->robot * 2 + 1] = move->dst_y;
   return 0;
 }
+
 
 static void unmove_robot(int64_t *grid, int64_t *robots, move_t* move) {
   int64_t robot_writer = 1 << (ROBOT_OFFSET + move->robot);
@@ -139,6 +142,7 @@ static PyObject *ricochet_target_mask(PyObject *self) {
   return Py_BuildValue("l", TARGET_MASK);
 }
 
+
 static char ricochet_solve_docstring[] = "usage: solve(grid, robots, target_robot, target_x, target_y, max_depth)";
 static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
@@ -165,16 +169,13 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
       robot_order[i + (i < target_robot)] = i;
     }
   }
-  for (int i = 0; i < n_robots; ++i) {
-    printf("%i %li\n", i, robot_order[i]);
-  }
 
   // Initialize moves arrays to store the progress we make and the shortest solution
   move_t moves[max_depth + 1], out_moves[max_depth + 1];
   int64_t n_moves = 0, n_out_moves = -1;
+  moves[0].robot_order_i = 0;
   moves[0].robot = target_robot;
   moves[0].action = -1;
-  moves[0].robot_order_i = 0;
 
   // Dive depth-first to try every combination of moves
   int64_t solution_found = 0;
@@ -192,20 +193,21 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
     // Verify a robot-action pair isn't out of bounds
     moves[n_moves].action++;
     if (moves[n_moves].action >= N_ACTIONS) {
+      moves[n_moves].robot_order_i++;
+      if (moves[n_moves].robot_order_i >= n_robots) {
+	if (--n_moves >= 0) unmove_robot(grid, robots, &(moves[n_moves]));
+	continue;
+      }
       moves[n_moves].robot = robot_order[moves[n_moves].robot_order_i];
       moves[n_moves].action = 0;
-      moves[n_moves].robot_order_i++;
     }
     
-    // If we're out of moves, go back
-    if (moves[n_moves].robot_order_i >= n_robots) {
-      if (--n_moves >= 0) unmove_robot(grid, robots, &(moves[n_moves]));
+    // Try to move, if we can't skip
+    if (move_robot(grid, robots, &(moves[n_moves]))) {
       continue;
     }
 
-    // Try to move, if we can't skip
-    if (move_robot(grid, robots, &(moves[n_moves])))
-      continue;
+    
     n_moves++;
 
     // If we're done, print it
@@ -222,7 +224,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
     // If we found a solution, save it
     if (solution_found) {
       solution_found = 0;
-      printf("Found a solution [%li]\n", n_moves);
 
       // Store the shortest solution
       if (n_out_moves < 0 || n_moves < n_out_moves) {
@@ -244,7 +245,7 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   if (n_out_moves < 0) {
     return Py_BuildValue("");
   }
-
+  
   // Build output
   PyObject *moves_list = PyList_New(n_out_moves);
   for (int64_t i = 0; i < n_out_moves; i++) {
@@ -255,9 +256,9 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
     PyList_SetItem(move_list, 3, Py_BuildValue("i", out_moves[i].dst_x));
     PyList_SetItem(move_list, 4, Py_BuildValue("i", out_moves[i].dst_y));
     PyList_SetItem(moves_list, i, move_list);
+    move_robot(grid, robots, &(out_moves[i]));
   }
-  return moves_list;
-  
+  return moves_list;  
 }
 
 static struct PyMethodDef module_methods[] = {

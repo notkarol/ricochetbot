@@ -25,7 +25,7 @@ class Board:
         self.__targets = np.zeros((17, 4), dtype=np.int64)
         self.__robots = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int64)
         self.__grid = np.zeros((16, 16), dtype=np.int64)
-        self.__solution = []
+        self.__solution = None
         self.__turn = 0
 
         # Prepare board
@@ -138,12 +138,17 @@ class Board:
 
     def next(self):
         self.__turn += 1
-    
+        self.__solution = None
+
+    def turn(self, turn):
+        self.__turn = turn
+        
     def solve(self):
         color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
         self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
                                          self.__max_depth)
-        print(self.__solution)
+        if self.__solution:
+            print(len(self.__solution))
 
     def plot(self, save_name='board'):
         fig = plt.gcf()
@@ -179,9 +184,18 @@ class Board:
                     plt.plot([x + 1, x + 1], [y, y + 1], lw=4, color='gray')
 
         if self.__solution:
+            plt.text(8, 8,  str(len(self.__solution)), horizontalalignment='center',
+                     verticalalignment='center', fontsize=42, color='white')
+            
             for robot_i, src_x, src_y, dst_x, dst_y in self.__solution:
-                plt.plot([src_x + 0.5, dst_x+ 0.5], [src_y + 0.5, dst_y + 0.5],
-                         self.__colors[robot_i], lw=4)
+                plt.plot([src_x + 0.45, dst_x + 0.5], [src_y + 0.45, dst_y + 0.5],
+                         self.__colors[robot_i], lw=3, alpha=0.2)
+                plt.plot([src_x + 0.45, dst_x + 0.5], [src_y + 0.55, dst_y + 0.5],
+                         self.__colors[robot_i], lw=3, alpha=0.2)
+                plt.plot([src_x + 0.55, dst_x + 0.5], [src_y + 0.45, dst_y + 0.5],
+                         self.__colors[robot_i], lw=3, alpha=0.2)
+                plt.plot([src_x + 0.55, dst_x + 0.5], [src_y + 0.55, dst_y + 0.5],
+                         self.__colors[robot_i], lw=3, alpha=0.2)
 
         plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100)
         plt.close()
@@ -199,9 +213,9 @@ if __name__ == "__main__":
     b = Board(args.max)
     counter = 0
     while not b.done():
-        print("Solving", counter)
+        print("Solving", counter)        
+        b.plot('board_%02i_clear' % counter)
         b.solve()
-        b.plot('board%02i' % counter)
+        b.plot('board_%02i_solved' % counter)
         b.next()
         counter += 1
-
