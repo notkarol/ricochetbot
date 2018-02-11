@@ -202,7 +202,7 @@ class Board:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=-1)
-    parser.add_argument("--max", type=int, default=8)
+    parser.add_argument("--max", type=int, default=12)
     parser.add_argument("--black", action="store_true")
     parser.add_argument("--path", type=str, default="../config/quadrants.yaml")
     args = parser.parse_args()
