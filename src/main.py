@@ -146,7 +146,7 @@ class Board:
         color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
         self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
                                          self.__max_depth)
-        if self.__solution:
+        if self.__solution is not None:
             print(len(self.__solution))
 
     def plot(self, save_name='board'):
