@@ -93,8 +93,7 @@ class Board:
                     x, y = np.matmul(np.array([x, y]), rot_matrix) + offset + 8
                     self.__grid[y, x] |= 1 << self.__markers.index(name)
                     self.__targets[target_index, :] = [self.__colors.index(name[0]),
-                                                       self.__shapes.index(name[1]),
-                                                       x, y]
+                                                       self.__shapes.index(name[1]), x, y]
                     target_index += 1
                 elif self.__is_wall(name):
                     wall_i = (wall_names.index(name) + flip_walls) % 2
@@ -113,7 +112,10 @@ class Board:
                         if x > 0:
                             self.__grid[y, x - 1] |= 1 << self.__markers.index('wr')
                 elif self.__is_redirect(name):
-                    raise NotImplementedError("Reflectors are not yet implemented")
+                    x, y = np.matmul(np.array([x, y]), rot_matrix) + offset + 8
+                    if flip_walls:
+                        name = name[0] + ('i' if name[1] == 'd' else 'i')
+                    self.__grid[y, x] |= 1 << self.__markers.index(name)
 
         # Make sure targets are not in predictable order
         np.random.shuffle(self.__targets)
@@ -182,6 +184,18 @@ class Board:
                 if self.__grid[y, x] & 1 << self.__markers.index('wr'):
                     plt.plot([x + 1, x + 1], [y, y + 1], lw=4, color='gray')
 
+        # Redirects
+        redirect_mask = ricochet.redirect_mask()
+        for y in range(16):
+            for x in range(16):
+                if self.__grid[y, x] & redirect_mask:
+                    for i, marker in enumerate(self.__markers):
+                        if len(marker) >= 2 and marker[1] == 'd' and self.__grid[y, x] & 1 << i:
+                            plt.plot([x, x + 1], [y, y+ 1], lw=4, color=marker[0])
+                        if len(marker) >= 2 and marker[1] == 'i' and self.__grid[y, x] & 1 << i:
+                            plt.plot([x, x + 1], [y + 1, y], lw=4, color=marker[0])
+
+        # Path to solution
         if self.__solution:
             plt.text(8, 8,  str(len(self.__solution)), horizontalalignment='center',
                      verticalalignment='center', fontsize=42, color='white')

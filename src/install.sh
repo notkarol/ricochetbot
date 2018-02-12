@@ -5,7 +5,7 @@ rm -rf build
 rc=$?
 if [[ "$rc" ==  "0" ]]
 then
-    ./setup.py install --user
+    ./setup.py build_ext --inplace
     rc=$?
 fi
 exit $rc

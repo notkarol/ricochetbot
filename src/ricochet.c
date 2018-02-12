@@ -267,7 +267,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
   // Find the solution for 1 robot
   int64_t n = 1;
-  printf("Trying 1\n");
   find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
 		 robot_order, n, target_robot, target_x, target_y);
 
@@ -276,7 +275,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   for (int i = 0; i < n_robots; ++i) {
     if (i != robot_order[0]) {
       robot_order[1] = i;
-      printf("Trying 2 (%li) %li %li\n", n_out_moves, robot_order[0], robot_order[1]);
       find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
 		     robot_order, n, target_robot, target_x, target_y);
     }
@@ -290,8 +288,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
       for (int j = i + 1; j < n_robots; ++j) {
   	if (j != robot_order[0]) {
   	  robot_order[2] = j;
-  	  printf("Trying 3 (%li) %li %li %li\n", n_out_moves,
-		 robot_order[0], robot_order[1], robot_order[2]);
   	  find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
   			 robot_order, n, target_robot, target_x, target_y);
   	}
@@ -300,15 +296,12 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   }
 
   // Solve for n robots
-  /*
   n = n_robots;
   for (int i = 0; i < n_robots; ++i)
     if (i != target_robot)
       robot_order[i + (i < target_robot)] = i;
-  printf("Trying %li (%li)\n", n, n_out_moves);
   find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
   		 robot_order, n, target_robot, target_x, target_y);
-  */
 
   move_robots(grid, robots, out_moves, n_out_moves);
   PyObject *list = build_moves_list(out_moves, n_out_moves);
