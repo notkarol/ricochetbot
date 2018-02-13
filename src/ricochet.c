@@ -23,11 +23,13 @@ static int64_t WALL_MASK = 15;
 static int64_t ROBOT_MASK = 496;
 static int64_t REDIRECT_MASK = 130560;
 static int64_t TARGET_MASK = 17179738112;
-static int64_t BLOCK_DOWN = 497;
-static int64_t BLOCK_UP = 498;
-static int64_t BLOCK_RIGHT = 500;
-static int64_t BLOCK_LEFT = 504;
+static int64_t REDIRECT_INCLINE = 85;
+static int64_t BLOCK_DOWN = 131057;
+static int64_t BLOCK_UP = 131058;
+static int64_t BLOCK_RIGHT = 131060;
+static int64_t BLOCK_LEFT = 131064;
 static int64_t ROBOT_OFFSET = 4;
+static int64_t REDIRECT_OFFSET = 9;
 static int64_t MOVE_UP = 0;
 static int64_t MOVE_LEFT = 1;
 static int64_t MOVE_DOWN = 2;
@@ -35,42 +37,111 @@ static int64_t MOVE_RIGHT = 3;
 static int64_t N_ACTIONS = 4;
 static int64_t GRID_WIDTH = 16;
 
-static int64_t left(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t* dst_x, int64_t* dst_y) {
+static int64_t left(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		    int64_t *dst_x, int64_t *dst_y);
+static int64_t up(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		  int64_t *dst_x, int64_t *dst_y);
+static int64_t right(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		     int64_t *dst_x, int64_t *dst_y);
+static int64_t down(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		    int64_t *dst_x, int64_t *dst_y);
+
+static int64_t redirect_direction(int64_t tile, int64_t robot) {
+  int64_t redirects = tile >> REDIRECT_OFFSET;
+  // If the robot is the same color as the redirect, just send the robot through
+  if (robot < 4 && ((redirects >> (robot * 2)) & 3)) {
+    return 0;
+  }
+  if ((redirects & REDIRECT_INCLINE) > 0) {
+    return 1;
+  }
+  return -1;
+}
+
+static int64_t left(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		    int64_t *dst_x, int64_t *dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
   while (*dst_x > 0 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & BLOCK_LEFT) == 0) {
     (*dst_x)--;
   }
+  // Handle redirect
+  if (*dst_x > 0 && grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & REDIRECT_MASK) {
+    (*dst_x)--;
+    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
+    if (rd == 0) {
+      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else if (rd == 1) {
+      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else {
+      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    }
+  }
   return src_x == *dst_x;
 }
 
-static int64_t up(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
-		  int64_t* dst_x, int64_t* dst_y) {
+static int64_t up(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		  int64_t *dst_x, int64_t *dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
   while (*dst_y > 0 && (grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & BLOCK_UP) == 0) {
     (*dst_y)--;
   }
+  // Handle redirect
+  if (*dst_y > 0 && grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK) {
+    (*dst_y)--;
+    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
+    if (rd == 0) {
+      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else if (rd == 1) {
+      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else {
+      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    }
+  }
   return src_y == *dst_y;
 }
 
-static int64_t right(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
-		     int64_t* dst_x, int64_t* dst_y) {
+static int64_t right(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		     int64_t *dst_x, int64_t *dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
   while (*dst_x < 15 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & BLOCK_RIGHT) == 0) {
     (*dst_x)++;
   }
+  // Handle redirect
+  if (*dst_x < 15 && grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & REDIRECT_MASK) {
+    (*dst_x)++;
+    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
+    if (rd == 0) {
+      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else if (rd == 1) {
+      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else {
+      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    }
+  }
   return src_x == *dst_x;
 }
 
-static int64_t down(const int64_t* grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t* dst_x, int64_t* dst_y) {
+static int64_t down(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
+		    int64_t *dst_x, int64_t *dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
   while (*dst_y < 15 && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & BLOCK_DOWN) == 0) {
     (*dst_y)++;
+  }
+  // Handle redirect
+  if (*dst_y < 15 && grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK) {
+    (*dst_y)++;
+    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
+    if (rd == 0) {
+      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else if (rd == 1) {
+      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    } else {
+      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
+    }
   }
   return src_y == *dst_y;
 }
@@ -130,12 +201,13 @@ static PyObject* build_moves_list(const move_t* moves, int64_t n_moves) {
   }
   PyObject *moves_list = PyList_New(n_moves);
   for (int64_t i = 0; i < n_moves; i++) {
-    PyObject *move_list = PyList_New(5);
+    PyObject *move_list = PyList_New(6);
     PyList_SetItem(move_list, 0, Py_BuildValue("i", moves[i].robot));
-    PyList_SetItem(move_list, 1, Py_BuildValue("i", moves[i].src_x));
-    PyList_SetItem(move_list, 2, Py_BuildValue("i", moves[i].src_y));
-    PyList_SetItem(move_list, 3, Py_BuildValue("i", moves[i].dst_x));
-    PyList_SetItem(move_list, 4, Py_BuildValue("i", moves[i].dst_y));
+    PyList_SetItem(move_list, 1, Py_BuildValue("i", moves[i].action));
+    PyList_SetItem(move_list, 2, Py_BuildValue("i", moves[i].src_x));
+    PyList_SetItem(move_list, 3, Py_BuildValue("i", moves[i].src_y));
+    PyList_SetItem(move_list, 4, Py_BuildValue("i", moves[i].dst_x));
+    PyList_SetItem(move_list, 5, Py_BuildValue("i", moves[i].dst_y));
     PyList_SetItem(moves_list, i, move_list);
   }
   return moves_list; 
@@ -249,10 +321,10 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
     return NULL;
 
   // Extract the grid data so that we can manipulate it in our search
-  int64_t* grid = PyArray_DATA(grid_obj);
+  int64_t *grid = PyArray_DATA(grid_obj);
   
   // Extract the robots array so we can manipulate it in our search
-  int64_t* robots = PyArray_DATA(robots_obj);
+  int64_t *robots = PyArray_DATA(robots_obj);
   int64_t n_robots = PyArray_DIM(robots_obj, 0);
 
   // Initialize moves arrays to store the progress we make and the shortest solution
@@ -262,7 +334,7 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   
   // Robot order is a heuristic optimization that will always search for solutions that
   // move the target robot. So initialize it, and then do moves for the other robots
-  int64_t* robot_order = malloc(n_robots * sizeof(int64_t));
+  int64_t *robot_order = malloc(n_robots * sizeof(int64_t));
   robot_order[0] = (target_robot == 4 ? n_robots - 1 : target_robot);
 
   // Find the solution for 1 robot

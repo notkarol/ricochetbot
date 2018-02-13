@@ -84,7 +84,7 @@ class Board:
                                    [np.sin(rot), np.cos(rot)]], dtype=np.int64)
 
             # Pick a quadrant
-            quadrant_index = np.random.randint(len(self.__quadrants[color]))
+            quadrant_index = 3#np.random.randint(len(self.__quadrants[color]))
             quadrant = self.__quadrants[color][quadrant_index]
 
             # Populate targets, walls, and reflectors based on our need to rotate
@@ -191,24 +191,27 @@ class Board:
                 if self.__grid[y, x] & redirect_mask:
                     for i, marker in enumerate(self.__markers):
                         if len(marker) >= 2 and marker[1] == 'd' and self.__grid[y, x] & 1 << i:
-                            plt.plot([x, x + 1], [y, y+ 1], lw=4, color=marker[0])
+                            plt.plot([x, x + 1], [y, y+ 1], lw=4, color=marker[0], alpha=0.5)
                         if len(marker) >= 2 and marker[1] == 'i' and self.__grid[y, x] & 1 << i:
-                            plt.plot([x, x + 1], [y + 1, y], lw=4, color=marker[0])
+                            plt.plot([x, x + 1], [y + 1, y], lw=4, color=marker[0], alpha=0.5)
 
         # Path to solution
         if self.__solution:
             plt.text(8, 8,  str(len(self.__solution)), horizontalalignment='center',
-                     verticalalignment='center', fontsize=42, color='white')
-            
-            for robot_i, src_x, src_y, dst_x, dst_y in self.__solution:
-                plt.plot([src_x + 0.45, dst_x + 0.5], [src_y + 0.45, dst_y + 0.5],
-                         self.__colors[robot_i], lw=3, alpha=0.2)
-                plt.plot([src_x + 0.45, dst_x + 0.5], [src_y + 0.55, dst_y + 0.5],
-                         self.__colors[robot_i], lw=3, alpha=0.2)
-                plt.plot([src_x + 0.55, dst_x + 0.5], [src_y + 0.45, dst_y + 0.5],
-                         self.__colors[robot_i], lw=3, alpha=0.2)
-                plt.plot([src_x + 0.55, dst_x + 0.5], [src_y + 0.55, dst_y + 0.5],
-                         self.__colors[robot_i], lw=3, alpha=0.2)
+                     verticalalignment='center', fontsize=32, color='white')
+            for robot_i, action_i, src_x, src_y, dst_x, dst_y in self.__solution:
+                xs = [src_x + 0.5, dst_x + 0.5]
+                ys = [src_y + 0.5, dst_y + 0.5]
+                if src_x != dst_x and src_y != dst_y:
+                    xs.insert(1, (dst_x if action_i % 2 else src_x) + 0.5)
+                    ys.insert(1, (src_y if action_i % 2 else dst_y) + 0.5)
+                for dx, dy in [(0.05, 0.05), (0, -0.1), (-0.1, 0.0), (0, 0.1)]:
+                    xs[0] += dx
+                    ys[0] += dy
+                    if len(xs) == 3:
+                        xs[1] += dx / 2
+                        ys[1] += dy / 2
+                    plt.plot(xs, ys, self.__colors[robot_i], lw=3, alpha=0.2)
 
         plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100)
         plt.close()
