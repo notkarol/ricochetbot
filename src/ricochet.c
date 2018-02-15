@@ -19,6 +19,10 @@ static const char *MARKERS[35] = {"wu", "wd", "wl", "wr", "b", "g", "r", "y", "k
 				  "bo", "bv", "bs", "bh", "go", "gv", "gs", "gh",
 				  "ro", "rv", "rs", "rh", "yo", "yv", "ys", "yh",
 				  "kp", ""};
+static int64_t WALL_UP = 1;
+static int64_t WALL_DOWN = 2;
+static int64_t WALL_LEFT = 4;
+static int64_t WALL_RIGHT = 8;
 static int64_t WALL_MASK = 15;
 static int64_t ROBOT_MASK = 496;
 static int64_t REDIRECT_MASK = 130560;
@@ -66,7 +70,8 @@ static int64_t left(const int64_t *grid, int64_t robot, int64_t src_x, int64_t s
     (*dst_x)--;
   }
   // Handle redirect
-  if (*dst_x > 0 && grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & REDIRECT_MASK) {
+  if (*dst_x > 0 && grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & REDIRECT_MASK
+	  && (grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & WALL_RIGHT) == 0) {
     (*dst_x)--;
     int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
     if (rd == 0) {
@@ -88,7 +93,8 @@ static int64_t up(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src
     (*dst_y)--;
   }
   // Handle redirect
-  if (*dst_y > 0 && grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK) {
+  if (*dst_y > 0 && grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK
+	  && (grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & WALL_DOWN) == 0) {
     (*dst_y)--;
     int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
     if (rd == 0) {
@@ -110,7 +116,8 @@ static int64_t right(const int64_t *grid, int64_t robot, int64_t src_x, int64_t 
     (*dst_x)++;
   }
   // Handle redirect
-  if (*dst_x < 15 && grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & REDIRECT_MASK) {
+  if (*dst_x < 15 && grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & REDIRECT_MASK
+	  && (grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & WALL_LEFT) == 0) {
     (*dst_x)++;
     int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
     if (rd == 0) {
@@ -132,7 +139,8 @@ static int64_t down(const int64_t *grid, int64_t robot, int64_t src_x, int64_t s
     (*dst_y)++;
   }
   // Handle redirect
-  if (*dst_y < 15 && grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK) {
+  if (*dst_y < 15 && grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK
+	  && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & WALL_UP) == 0) {
     (*dst_y)++;
     int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
     if (rd == 0) {

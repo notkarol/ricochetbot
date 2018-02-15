@@ -8,6 +8,6 @@ setup(
     author = "Karol Zieba",
     author_email = "notkarol@gmail.com",
     description = "Solve a sliding puzzle game",
-    ext_modules=[Extension("ricochet", ["ricochet.c"])],
+    ext_modules=[Extension("ricochet", ["ricochet.c"], extra_compile_args=['-std=c99'])],
     include_dirs=get_numpy_include_dirs(),
 )
