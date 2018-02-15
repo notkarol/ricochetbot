@@ -1,6 +1,6 @@
 # ricochetbot
 
-A Ricochet Robots solver. 
+An unofficial Ricochet Robots solver. This repository serves as a test various heuristics for solving the game.
 
 ## Goals
 
@@ -18,13 +18,20 @@ A Ricochet Robots solver.
 
 ## Instructions
 
-### Solve for a given board
-
-Not yet implemented.
-
-### Generate and solve a random board
-
+1. Compile the code.
 ```bash
-cd src
-python3 main.py
+./setup.py build_ext --inplace
 ```
+2. Generate a board, robots, and then solve it for a random order of targets.
+```bash
+./main.py
+```
+3. View results. The ready image is the state of the board before the solved image solves it.
+```bash
+eog board*png
+```
+
+## Example
+
+![alt text](https://raw.githubusercontent.com/notkarol/ricochetbot/master/images/example.png)
+

@@ -16,8 +16,8 @@ typedef struct move_t {
 
 static const char *MARKERS[35] = {"wu", "wd", "wl", "wr", "b", "g", "r", "y", "k",
 				  "bi", "bd", "gi", "gd", "ri", "rd", "yi", "yd",
-				  "bo", "bv", "bs", "bh", "go", "gv", "gs", "gh",
-				  "ro", "rv", "rs", "rh", "yo", "yv", "ys", "yh",
+				  "bo", "b^", "bs", "bh", "go", "g^", "gs", "gh",
+				  "ro", "r^", "rs", "rh", "yo", "y^", "ys", "yh",
 				  "kp", ""};
 static int64_t WALL_UP = 1;
 static int64_t WALL_DOWN = 2;

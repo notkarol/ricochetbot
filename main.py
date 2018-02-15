@@ -11,16 +11,17 @@ import ricochet
 
 class Board:
 
-    def __init__(self, max_depth, include_black_robot, quadrant_path):
+    def __init__(self, max_depth, include_black_robot, include_redirects, quadrant_path):
         # Handle Arguments
-        self.__include_black_robot = include_black_robot
-        self.__quadrant_path = quadrant_path
         self.__max_depth = max_depth
+        self.__include_black_robot = include_black_robot
+        self.__include_redirects = include_redirects
+        self.__quadrant_path = quadrant_path
 
         # Initialize rest of class variables
         self.__markers = ricochet.markers()
         self.__colors = self.__markers[4:9]
-        self.__shapes = ['o', 'v', 's', 'h', 'p']
+        self.__shapes = ['o', '^', 's', 'h', 'p']
         self.__targets = np.zeros((17, 4), dtype=np.int64)
         self.__robots = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int64)
         self.__grid = np.zeros((16, 16), dtype=np.int64)
@@ -84,7 +85,8 @@ class Board:
                                    [np.sin(rot), np.cos(rot)]], dtype=np.int64)
 
             # Pick a quadrant
-            quadrant_index = 3#np.random.randint(len(self.__quadrants[color]))
+            num_quadrants = len(self.__quadrants[color]) - (1 - self.__include_redirects)
+            quadrant_index = np.random.randint(num_quadrants)
             quadrant = self.__quadrants[color][quadrant_index]
 
             # Populate targets, walls, and reflectors based on our need to rotate
@@ -153,10 +155,17 @@ class Board:
 
     def plot(self, save_name='board'):
         fig = plt.gcf()
+        ax = fig.add_subplot(111)
+        ax.set_facecolor("gainsboro")
+        for side in ['top', 'bottom', 'right', 'left']:
+            ax.spines[side].set_visible(False)
+        plt.tick_params(axis='x', bottom='off')
+        plt.tick_params(axis='y', left='off')
+        fig.patch.set_facecolor('black')
         fig.set_size_inches(10, 10)
         plt.axis([0, 16, 16, 0])
-        plt.xticks(np.arange(17))
-        plt.yticks(np.arange(17))
+        plt.xticks(np.arange(17), [])
+        plt.yticks(np.arange(17), [])
         plt.grid()
 
         # Targets
@@ -166,23 +175,23 @@ class Board:
             if i == self.__turn:
                 alpha = 1
                 plt.plot(8, 8, name, ms=64)
-            plt.plot(x + 0.5, y + 0.5, name, alpha=alpha, ms=32, markeredgecolor='grey')
+            plt.plot(x + 0.5, y + 0.5, name, alpha=alpha, ms=32, markeredgecolor='gray')
 
         # Robots
         for i, (x, y) in enumerate(self.__robots):
-            plt.plot(x + 0.5, y + 0.5, self.__colors[i] + '*', ms=24, markeredgecolor='grey')
+            plt.plot(x + 0.5, y + 0.5, self.__colors[i] + '*', ms=32, markeredgecolor='gray')
 
         # Walls
         for y in range(16):
             for x in range(16):
                 if self.__grid[y, x] & 1 << self.__markers.index('wu'):
-                    plt.plot([x, x + 1], [y, y], lw=4, color='gray')    
+                    plt.plot([x, x + 1], [y, y], lw=4*(1+(y==0)), color='gray')    
                 if self.__grid[y, x] & 1 << self.__markers.index('wd'):
-                    plt.plot([x, x + 1], [y + 1, y + 1], lw=4, color='gray')    
+                    plt.plot([x, x + 1], [y + 1, y + 1], lw=4*(1+(y==15)), color='gray')    
                 if self.__grid[y, x] & 1 << self.__markers.index('wl'):
-                    plt.plot([x, x], [y, y + 1], lw=4, color='gray')
+                    plt.plot([x, x], [y, y + 1], lw=4*(1+(x==0)), color='gray')
                 if self.__grid[y, x] & 1 << self.__markers.index('wr'):
-                    plt.plot([x + 1, x + 1], [y, y + 1], lw=4, color='gray')
+                    plt.plot([x + 1, x + 1], [y, y + 1], lw=4*(1+(x==15)), color='gray')
 
         # Redirects
         redirect_mask = ricochet.redirect_mask()
@@ -198,7 +207,7 @@ class Board:
         # Path to solution
         if self.__solution:
             plt.text(8, 8,  str(len(self.__solution)), horizontalalignment='center',
-                     verticalalignment='center', fontsize=32, color='white')
+                     verticalalignment='center', fontsize=32, color='lightgray')
             for robot_i, action_i, src_x, src_y, dst_x, dst_y in self.__solution:
                 xs = [src_x + 0.5, dst_x + 0.5]
                 ys = [src_y + 0.5, dst_y + 0.5]
@@ -213,26 +222,33 @@ class Board:
                         ys[1] += dy / 2
                     plt.plot(xs, ys, self.__colors[robot_i], lw=3, alpha=0.2)
 
-        plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100)
+        plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100, facecolor='gainsboro')
         plt.close()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--seed", type=int, default=-1)
-    parser.add_argument("--max", type=int, default=12)
-    parser.add_argument("--black", action="store_true")
-    parser.add_argument("--path", type=str, default="../config/quadrants.yaml")
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--seed", type=int, default=-1,
+                        help="Seed to initialize board/robots/order with. Less than 0 is random")
+    parser.add_argument("--max", type=int, default=12,
+                        help="Maximum number of moves to try to solve in. More moves means that it"
+                        "'s likely to take quadratically longer to solve board.")
+    parser.add_argument("--redirect", action="store_true",
+                        help="Alternate mode: possibly include board tiles that have redirects")
+    parser.add_argument("--black", action="store_true",
+                        help="Alternate mode: include a fifth robot")
+    parser.add_argument("--path", type=str, default="config/quadrants.yaml",
+                        help="Path to quadrants yaml in case you want to design your own boards.")
     args = parser.parse_args()
 
     if args.seed >= 0:
         random.seed(args.seed)
         np.random.seed(args.seed)
 
-    b = Board(args.max, args.black, args.path)
+    b = Board(args.max, args.black, args.redirect, args.path)
     counter = 0
     while not b.done():
         print("Solving", counter)        
-        b.plot('board_%02i_clear' % counter)
+        b.plot('board_%02i_ready' % counter)
         b.solve()
         b.plot('board_%02i_solved' % counter)
         b.next()
