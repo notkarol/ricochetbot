@@ -19,36 +19,20 @@ static const char *MARKERS[35] = {"wu", "wd", "wl", "wr", "b", "g", "r", "y", "k
 				  "bo", "b^", "bs", "bh", "go", "g^", "gs", "gh",
 				  "ro", "r^", "rs", "rh", "yo", "y^", "ys", "yh",
 				  "kp", ""};
-static int64_t WALL_UP = 1;
-static int64_t WALL_DOWN = 2;
-static int64_t WALL_LEFT = 4;
-static int64_t WALL_RIGHT = 8;
 static int64_t WALL_MASK = 15;
 static int64_t ROBOT_MASK = 496;
 static int64_t REDIRECT_MASK = 130560;
 static int64_t TARGET_MASK = 17179738112;
 static int64_t REDIRECT_INCLINE = 85;
-static int64_t BLOCK_DOWN = 131057;
-static int64_t BLOCK_UP = 131058;
-static int64_t BLOCK_RIGHT = 131060;
-static int64_t BLOCK_LEFT = 131064;
 static int64_t ROBOT_OFFSET = 4;
 static int64_t REDIRECT_OFFSET = 9;
-static int64_t MOVE_UP = 0;
-static int64_t MOVE_LEFT = 1;
-static int64_t MOVE_DOWN = 2;
-static int64_t MOVE_RIGHT = 3;
 static int64_t N_ACTIONS = 4;
 static int64_t GRID_WIDTH = 16;
-
-static int64_t left(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t *dst_x, int64_t *dst_y);
-static int64_t up(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		  int64_t *dst_x, int64_t *dst_y);
-static int64_t right(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		     int64_t *dst_x, int64_t *dst_y);
-static int64_t down(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t *dst_x, int64_t *dst_y);
+static int64_t BLOCK[4] = {131058, 131064, 131057, 131060};
+static int64_t WALL[4] = {2, 8, 1, 4};
+static int64_t SOLVE_DFS = 1;
+static int64_t SOLVE_BFS = 2;
+static int64_t SOLVE_AST = 3;
 
 static int64_t redirect_direction(int64_t tile, int64_t robot) {
   int64_t redirects = tile >> REDIRECT_OFFSET;
@@ -62,115 +46,40 @@ static int64_t redirect_direction(int64_t tile, int64_t robot) {
   return -1;
 }
 
-static int64_t left(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t *dst_x, int64_t *dst_y) {
+// up left down right
+static int64_t find_move(const int64_t *grid, int64_t robot, int64_t action,
+			 int64_t src_x, int64_t src_y, int64_t *dst_x, int64_t *dst_y) {
   *dst_x = src_x;
   *dst_y = src_y;
-  while (*dst_x > 0 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & BLOCK_LEFT) == 0) {
-    (*dst_x)--;
+  int64_t dx = ((action % 2) == 1) * pow(-1, action < 2);
+  int64_t dy = ((action % 2) == 0) * pow(-1, action < 2);
+  while ((dy >= 0 || *dst_y > 0) && (dy <= 0 || *dst_y < 15) &&
+	 (dx >= 0 || *dst_x > 0) && (dx <= 0 || *dst_x < 15) && 
+	 (grid[(*dst_y + dy) * GRID_WIDTH + (*dst_x + dx)] & BLOCK[action]) == 0) {
+    (*dst_x) += dx;
+    (*dst_y) += dy;
   }
   // Handle redirect
-  if (*dst_x > 0 && grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & REDIRECT_MASK
-	  && (grid[(*dst_y) * GRID_WIDTH + (*dst_x - 1)] & WALL_RIGHT) == 0) {
-    (*dst_x)--;
+  if ((dy >= 0 || *dst_y > 0) && (dy <= 0 || *dst_y < 15) &&
+      (dx >= 0 || *dst_x > 0) && (dx <= 0 || *dst_x < 15) &&
+      grid[(*dst_y + dy) * GRID_WIDTH + (*dst_x + dx)] & REDIRECT_MASK &&
+      (grid[(*dst_y + dy) * GRID_WIDTH + (*dst_x + dx)] & WALL[action]) == 0) {
+    (*dst_x) += dx;
+    (*dst_y) += dy;
     int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
-    if (rd == 0) {
-      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else if (rd == 1) {
-      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else {
-      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    }
+    action = (action + (int64_t) pow(rd, 1 + (action >= 2))) % 4;
+    return find_move(grid, robot, action, *dst_x, *dst_y, dst_x, dst_y);
   }
-  return src_x == *dst_x;
-}
-
-static int64_t up(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		  int64_t *dst_x, int64_t *dst_y) {
-  *dst_x = src_x;
-  *dst_y = src_y;
-  while (*dst_y > 0 && (grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & BLOCK_UP) == 0) {
-    (*dst_y)--;
-  }
-  // Handle redirect
-  if (*dst_y > 0 && grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK
-	  && (grid[(*dst_y - 1) * GRID_WIDTH + (*dst_x)] & WALL_DOWN) == 0) {
-    (*dst_y)--;
-    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
-    if (rd == 0) {
-      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else if (rd == 1) {
-      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else {
-      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    }
-  }
-  return src_y == *dst_y;
-}
-
-static int64_t right(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		     int64_t *dst_x, int64_t *dst_y) {
-  *dst_x = src_x;
-  *dst_y = src_y;
-  while (*dst_x < 15 && (grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & BLOCK_RIGHT) == 0) {
-    (*dst_x)++;
-  }
-  // Handle redirect
-  if (*dst_x < 15 && grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & REDIRECT_MASK
-	  && (grid[(*dst_y) * GRID_WIDTH + (*dst_x + 1)] & WALL_LEFT) == 0) {
-    (*dst_x)++;
-    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
-    if (rd == 0) {
-      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else if (rd == 1) {
-      return up(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else {
-      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    }
-  }
-  return src_x == *dst_x;
-}
-
-static int64_t down(const int64_t *grid, int64_t robot, int64_t src_x, int64_t src_y,
-		    int64_t *dst_x, int64_t *dst_y) {
-  *dst_x = src_x;
-  *dst_y = src_y;
-  while (*dst_y < 15 && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & BLOCK_DOWN) == 0) {
-    (*dst_y)++;
-  }
-  // Handle redirect
-  if (*dst_y < 15 && grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & REDIRECT_MASK
-	  && (grid[(*dst_y + 1) * GRID_WIDTH + (*dst_x)] & WALL_UP) == 0) {
-    (*dst_y)++;
-    int64_t rd = redirect_direction(grid[(*dst_y) * GRID_WIDTH + (*dst_x)], robot);
-    if (rd == 0) {
-      return down(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else if (rd == 1) {
-      return left(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    } else {
-      return right(grid, robot, *dst_x, *dst_y, dst_x, dst_y);
-    }
-  }
-  return src_y == *dst_y;
+  return src_y == *dst_y && src_x == *dst_x;
 }
 
 static int64_t move_robot(int64_t *grid, int64_t *robots, move_t *move) {
 
   // Find an available move
-  int64_t rc = -1;
   move->src_x = robots[move->robot * 2];
   move->src_y = robots[move->robot * 2 + 1];
-  
-  if (move->action == MOVE_UP) {
-    rc = up(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
-  } else if (move->action == MOVE_LEFT) {
-    rc = left(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
-  } else if (move->action == MOVE_DOWN) {
-    rc = down(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
-  } else if (move->action == MOVE_RIGHT) {
-    rc = right(grid, move->robot, move->src_x, move->src_y, &move->dst_x, &move->dst_y);
-  }
-    
+  int64_t rc = find_move(grid, move->robot, move->action, move->src_x, move->src_y,
+			 &move->dst_x, &move->dst_y);
   if (rc) {
     return rc;
   }
@@ -259,15 +168,15 @@ static int64_t is_solution(int64_t *grid, int64_t *robots, int64_t n_robots,
   return solution_found;
 }
 
-
-static void find_solutions(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
-			      move_t *out_moves, int64_t *n_out_moves,
-			      int64_t *robot_order, int64_t n_robots,
-			      int64_t target_robot, int64_t target_x, int64_t target_y) {
+static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
+		       move_t *out_moves, int64_t *n_out_moves,
+		       int64_t *robot_order, int64_t n_robots,
+		       int64_t target_robot, int64_t target_x, int64_t target_y) {
   int64_t n_moves = 0;
   moves[0].robot_order_i = 0;
   moves[0].robot = robot_order[0];
   moves[0].action = -1;
+  int64_t move;
   
   // Dive depth-first to try every combination of moves
   while (n_moves >= 0) {
@@ -288,6 +197,11 @@ static void find_solutions(int64_t *grid, int64_t *robots, move_t *moves, int64_
     if (move_robot(grid, robots, &(moves[n_moves]))) {
       continue;
     }
+    /* for (move = n_moves - 1; move >= 0; --move) { */
+    /*   if (moves[i] */
+    /*   continue; */
+    /* } */
+
     n_moves++;
 
     // If we found a solution, save it
@@ -323,9 +237,9 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
   // Process Arguments
   PyArrayObject *grid_obj, *robots_obj;
-  int64_t target_robot, target_x, target_y, max_depth;
-  if (!PyArg_ParseTuple(args, "OOllll", &grid_obj, &robots_obj, &target_robot,
-			&target_x, &target_y, &max_depth))
+  int64_t target_robot, target_x, target_y, max_depth, solver;
+  if (!PyArg_ParseTuple(args, "OOlllll", &grid_obj, &robots_obj, &target_robot,
+			&target_x, &target_y, &max_depth, &solver))
     return NULL;
 
   // Extract the grid data so that we can manipulate it in our search
@@ -347,30 +261,18 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
   // Find the solution for 1 robot
   int64_t n = 1;
-  find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		 robot_order, n, target_robot, target_x, target_y);
-
+  if (solver == SOLVE_DFS) {
+    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+	       robot_order, n, target_robot, target_x, target_y);
+  }
   // Solve for every combination of 2 robots
   n = 2;
   for (int i = 0; i < n_robots; ++i) {
     if (i != robot_order[0]) {
       robot_order[1] = i;
-      find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		     robot_order, n, target_robot, target_x, target_y);
-    }
-  }
-
-  // Solve for every combination of 3 robots
-  n = 3;
-  for (int i = 0; i < n_robots; ++i) {
-    if (i != robot_order[0]) {
-      robot_order[1] = i;
-      for (int j = i + 1; j < n_robots; ++j) {
-  	if (j != robot_order[0]) {
-  	  robot_order[2] = j;
-  	  find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-  			 robot_order, n, target_robot, target_x, target_y);
-  	}
+      if (solver == SOLVE_DFS) {
+	dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+		   robot_order, n, target_robot, target_x, target_y);
       }
     }
   }
@@ -380,9 +282,11 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   for (int i = 0; i < n_robots; ++i)
     if (i != target_robot)
       robot_order[i + (i < target_robot)] = i;
-  find_solutions(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-  		 robot_order, n, target_robot, target_x, target_y);
-
+  if (solver == SOLVE_DFS) {
+    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+	       robot_order, n, target_robot, target_x, target_y);
+  }
+    
   move_robots(grid, robots, out_moves, n_out_moves);
   PyObject *list = build_moves_list(out_moves, n_out_moves);
   free(moves);

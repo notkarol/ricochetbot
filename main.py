@@ -146,10 +146,10 @@ class Board:
     def turn(self, turn):
         self.__turn = turn
         
-    def solve(self):
+    def solve(self, solver):
         color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
         self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
-                                         self.__max_depth)
+                                         self.__max_depth, solver)
         if self.__solution is not None:
             print(len(self.__solution))
 
@@ -170,7 +170,7 @@ class Board:
 
         # Targets
         for i, (color_i, shape_i, x, y) in enumerate(self.__targets):
-            alpha = 0.33
+            alpha = 0.1
             name = self.__colors[color_i] + self.__shapes[shape_i]
             if i == self.__turn:
                 alpha = 1
@@ -238,6 +238,9 @@ if __name__ == "__main__":
                         help="Alternate mode: include a fifth robot")
     parser.add_argument("--path", type=str, default="config/quadrants.yaml",
                         help="Path to quadrants yaml in case you want to design your own boards.")
+    parser.add_argument("--plot", action="store_true", help="Plot the board")
+    parser.add_argument("--solver", type=int, default=1, help="Solver to use. 1 is depth-first."
+                        "2 is breadth-first. 3 is bi-directional")
     args = parser.parse_args()
 
     if args.seed >= 0:
@@ -247,9 +250,11 @@ if __name__ == "__main__":
     b = Board(args.max, args.black, args.redirect, args.path)
     counter = 0
     while not b.done():
-        print("Solving", counter)        
-        b.plot('board_%02i_ready' % counter)
-        b.solve()
-        b.plot('board_%02i_solved' % counter)
+        print("Solving", counter)
+        if args.plot:
+            b.plot('board_%02i_ready' % counter)
+        b.solve(args.solver)
+        if args.plot:
+            b.plot('board_%02i_solved' % counter)
         b.next()
         counter += 1
