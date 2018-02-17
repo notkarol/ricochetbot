@@ -168,6 +168,13 @@ static int64_t is_solution(int64_t *grid, int64_t *robots, int64_t n_robots,
   return solution_found;
 }
 
+static void bfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
+		       move_t *out_moves, int64_t *n_out_moves,
+		       int64_t *robot_order, int64_t n_robots,
+		       int64_t target_robot, int64_t target_x, int64_t target_y) {
+
+}
+
 static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
 		       move_t *out_moves, int64_t *n_out_moves,
 		       int64_t *robot_order, int64_t n_robots,
@@ -176,8 +183,7 @@ static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *m
   moves[0].robot_order_i = 0;
   moves[0].robot = robot_order[0];
   moves[0].action = -1;
-  int64_t move;
-  
+
   // Dive depth-first to try every combination of moves
   while (n_moves >= 0) {
 
@@ -197,11 +203,16 @@ static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *m
     if (move_robot(grid, robots, &(moves[n_moves]))) {
       continue;
     }
-    /* for (move = n_moves - 1; move >= 0; --move) { */
-    /*   if (moves[i] */
-    /*   continue; */
-    /* } */
 
+    // Skip if we already been in this location
+    if (n_moves >= 1 && moves[n_moves - 1].robot == moves[n_moves].robot &&
+	moves[n_moves - 1].src_x == moves[n_moves].dst_x &&
+	moves[n_moves - 1].src_y == moves[n_moves].dst_y) {
+      unmove_robot(grid, robots, &(moves[n_moves]));
+      continue;
+    }
+
+    // Otherwise register this move and go on
     n_moves++;
 
     // If we found a solution, save it
@@ -264,7 +275,11 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   if (solver == SOLVE_DFS) {
     dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
 	       robot_order, n, target_robot, target_x, target_y);
+  } else if (solver == SOLVE_DFS) {
+    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+	       robot_order, n, target_robot, target_x, target_y);
   }
+
   // Solve for every combination of 2 robots
   n = 2;
   for (int i = 0; i < n_robots; ++i) {
@@ -273,10 +288,33 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
       if (solver == SOLVE_DFS) {
 	dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
 		   robot_order, n, target_robot, target_x, target_y);
+      } else if (solver == SOLVE_DFS) {
+	bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+		   robot_order, n, target_robot, target_x, target_y);
       }
     }
   }
 
+   // Solve for every combination of 3 robots
+  n = 3;
+  for (int i = 0; i < n_robots; ++i) {
+    if (i != robot_order[0]) {
+      robot_order[1] = i;
+      for (int j = i + 1; j < n_robots; ++j) {
+	if (j != robot_order[0]) {
+	  robot_order[2] = j;
+	  if (solver == SOLVE_DFS) {
+	    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+		       robot_order, n, target_robot, target_x, target_y);
+	  } else if (solver == SOLVE_DFS) {
+	    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+		       robot_order, n, target_robot, target_x, target_y);
+	  }
+	}
+      }
+    }
+  }
+	
   // Solve for n robots
   n = n_robots;
   for (int i = 0; i < n_robots; ++i)
@@ -284,6 +322,9 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
       robot_order[i + (i < target_robot)] = i;
   if (solver == SOLVE_DFS) {
     dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+	       robot_order, n, target_robot, target_x, target_y);
+  } else if (solver == SOLVE_DFS) {
+    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
 	       robot_order, n, target_robot, target_x, target_y);
   }
     

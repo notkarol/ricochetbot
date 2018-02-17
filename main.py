@@ -151,7 +151,9 @@ class Board:
         self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
                                          self.__max_depth, solver)
         if self.__solution is not None:
-            print(len(self.__solution))
+            print("%2i" % len(self.__solution))
+        else:
+            print("N/A")
 
     def plot(self, save_name='board'):
         fig = plt.gcf()
@@ -250,7 +252,7 @@ if __name__ == "__main__":
     b = Board(args.max, args.black, args.redirect, args.path)
     counter = 0
     while not b.done():
-        print("Solving", counter)
+        print("Solving %2i:" % counter, end=' ')
         if args.plot:
             b.plot('board_%02i_ready' % counter)
         b.solve(args.solver)
