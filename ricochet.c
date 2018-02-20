@@ -31,8 +31,7 @@ static int64_t GRID_WIDTH = 16;
 static int64_t BLOCK[4] = {131058, 131064, 131057, 131060};
 static int64_t WALL[4] = {2, 8, 1, 4};
 static int64_t SOLVE_DFS = 1;
-static int64_t SOLVE_BFS = 2;
-static int64_t SOLVE_AST = 3;
+static int64_t SOLVE_GRAPH = 2;
 
 static int64_t redirect_direction(int64_t tile, int64_t robot) {
   int64_t redirects = tile >> REDIRECT_OFFSET;
@@ -168,13 +167,6 @@ static int64_t is_solution(int64_t *grid, int64_t *robots, int64_t n_robots,
   return solution_found;
 }
 
-static void bfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
-		       move_t *out_moves, int64_t *n_out_moves,
-		       int64_t *robot_order, int64_t n_robots,
-		       int64_t target_robot, int64_t target_x, int64_t target_y) {
-
-}
-
 static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
 		       move_t *out_moves, int64_t *n_out_moves,
 		       int64_t *robot_order, int64_t n_robots,
@@ -243,6 +235,54 @@ static void dfs_solver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *m
   }
 }
 
+static void dfs_driver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
+		       move_t *out_moves, int64_t *n_out_moves,
+		       int64_t *robot_order, int64_t n_robots,
+		       int64_t target_robot, int64_t target_x, int64_t target_y) {
+  int64_t n = 1;
+  dfs_solver(grid, robots, moves, max_depth, out_moves, n_out_moves,
+	     robot_order, n, target_robot, target_x, target_y);
+  // Solve for every combination of 2 robots
+  n = 2;
+  for (int i = 0; i < n_robots; ++i) {
+    if (i != robot_order[0]) {
+      robot_order[1] = i;
+      dfs_solver(grid, robots, moves, max_depth, out_moves, n_out_moves,
+		 robot_order, n, target_robot, target_x, target_y);
+    }
+  }
+    
+  // Solve for every combination of 3 robots
+  n = 3;
+  for (int i = 0; i < n_robots; ++i) {
+    if (i != robot_order[0]) {
+      robot_order[1] = i;
+      for (int j = i + 1; j < n_robots; ++j) {
+	if (j != robot_order[0]) {
+	  robot_order[2] = j;
+	  dfs_solver(grid, robots, moves, max_depth, out_moves, n_out_moves,
+		     robot_order, n, target_robot, target_x, target_y);
+	}
+      }
+    }
+  }
+	
+  // Solve for n robots
+  n = n_robots;
+  for (int i = 0; i < n_robots; ++i)
+    if (i != target_robot)
+      robot_order[i + (i < target_robot)] = i;
+  dfs_solver(grid, robots, moves, max_depth, out_moves, n_out_moves,
+	     robot_order, n, target_robot, target_x, target_y);
+}
+
+static void graph_driver(int64_t *grid, int64_t *robots, move_t *moves, int64_t *max_depth,
+			 move_t *out_moves, int64_t *n_out_moves,
+			 int64_t *robot_order, int64_t n_robots,
+			 int64_t target_robot, int64_t target_x, int64_t target_y) {
+  
+}
+
 static char ricochet_solve_docstring[] = "usage: solve(grid, robots, target_robot, target_x, target_y, max_depth)";
 static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
@@ -254,80 +294,32 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
     return NULL;
 
   // Extract the grid data so that we can manipulate it in our search
-  int64_t *grid = PyArray_DATA(grid_obj);
+  int64_t *grid = (int64_t*) PyArray_DATA(grid_obj);
   
   // Extract the robots array so we can manipulate it in our search
-  int64_t *robots = PyArray_DATA(robots_obj);
+  int64_t *robots = (int64_t*) PyArray_DATA(robots_obj);
   int64_t n_robots = PyArray_DIM(robots_obj, 0);
 
   // Initialize moves arrays to store the progress we make and the shortest solution
-  move_t *moves = malloc((max_depth) * sizeof(move_t));
-  move_t *out_moves = malloc((max_depth) * sizeof(move_t));
+  move_t *moves = (move_t*) malloc(max_depth * sizeof(move_t));
+  move_t *out_moves = (move_t*) malloc(max_depth * sizeof(move_t));
   int64_t n_out_moves = -1;
   
   // Robot order is a heuristic optimization that will always search for solutions that
   // move the target robot. So initialize it, and then do moves for the other robots
-  int64_t *robot_order = malloc(n_robots * sizeof(int64_t));
+  int64_t *robot_order = (int64_t*) malloc(n_robots * sizeof(int64_t));
   robot_order[0] = (target_robot == 4 ? n_robots - 1 : target_robot);
 
-  // Find the solution for 1 robot
-  int64_t n = 1;
+  // Solve for Depth first
   if (solver == SOLVE_DFS) {
-    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-	       robot_order, n, target_robot, target_x, target_y);
-  } else if (solver == SOLVE_DFS) {
-    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-	       robot_order, n, target_robot, target_x, target_y);
+    dfs_driver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+	       robot_order, n_robots, target_robot, target_x, target_y);
   }
-
-  // Solve for every combination of 2 robots
-  n = 2;
-  for (int i = 0; i < n_robots; ++i) {
-    if (i != robot_order[0]) {
-      robot_order[1] = i;
-      if (solver == SOLVE_DFS) {
-	dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		   robot_order, n, target_robot, target_x, target_y);
-      } else if (solver == SOLVE_DFS) {
-	bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		   robot_order, n, target_robot, target_x, target_y);
-      }
-    }
+  else if (solver == SOLVE_GRAPH) {
+    graph_driver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
+		 robot_order, n_robots, target_robot, target_x, target_y);
   }
-
-   // Solve for every combination of 3 robots
-  n = 3;
-  for (int i = 0; i < n_robots; ++i) {
-    if (i != robot_order[0]) {
-      robot_order[1] = i;
-      for (int j = i + 1; j < n_robots; ++j) {
-	if (j != robot_order[0]) {
-	  robot_order[2] = j;
-	  if (solver == SOLVE_DFS) {
-	    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		       robot_order, n, target_robot, target_x, target_y);
-	  } else if (solver == SOLVE_DFS) {
-	    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-		       robot_order, n, target_robot, target_x, target_y);
-	  }
-	}
-      }
-    }
-  }
-	
-  // Solve for n robots
-  n = n_robots;
-  for (int i = 0; i < n_robots; ++i)
-    if (i != target_robot)
-      robot_order[i + (i < target_robot)] = i;
-  if (solver == SOLVE_DFS) {
-    dfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-	       robot_order, n, target_robot, target_x, target_y);
-  } else if (solver == SOLVE_DFS) {
-    bfs_solver(grid, robots, moves, &max_depth, out_moves, &n_out_moves,
-	       robot_order, n, target_robot, target_x, target_y);
-  }
-    
+  
   move_robots(grid, robots, out_moves, n_out_moves);
   PyObject *list = build_moves_list(out_moves, n_out_moves);
   free(moves);
