@@ -11,42 +11,26 @@ import ricochet
 
 class Board:
 
-    def __init__(self, max_depth, include_black_robot, include_redirects, quadrant_path):
-        # Handle Arguments
-        self.__max_depth = max_depth
+    def __init__(self, quadrants, include_black_robot):
         self.__include_black_robot = include_black_robot
-        self.__include_redirects = include_redirects
-        self.__quadrant_path = quadrant_path
 
         # Initialize rest of class variables
-        self.__markers = ricochet.markers()
+        self.__markers = ["wu", "wd", "wl", "wr", "b", "g", "r", "y", "k",
+                          "bi", "bd", "gi", "gd", "ri", "rd", "yi", "yd",
+                          "bo", "b^", "bs", "bh", "go", "g^", "gs", "gh",
+                          "ro", "r^", "rs", "rh", "yo", "y^", "ys", "yh",
+                          "kp", ""]
         self.__colors = self.__markers[4:9]
         self.__shapes = ['o', '^', 's', 'h', 'p']
-        self.__targets = np.zeros((17, 4), dtype=np.int64)
-        self.__robots = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int64)
-        self.__grid = np.zeros((16, 16), dtype=np.int64)
-        self.__solution = None
-        self.__turn = 0
+        self.__target_list = np.zeros((17, 4), dtype=np.int8)
+        self.__robot_list = np.zeros((4 + self.__include_black_robot, 2),  dtype=np.int8)
+        self.__wall_grids = {wall: np.zeros((16, 16), dtype=np.float) for wall in 'hv'}
+        self.__robot_grid = np.zeros((16, 16), dtype=np.float)
+        self.__target_grid = np.zeros((16, 16), dtype=np.float)
 
         # Prepare board
-        self.__load_quadrants()
-        self.__create_board()
-        self.__populate_robots()
-
-    def __load_quadrants(self):
-        """
-        Loads the quadrants yaml and adds inner and outer walls to each quadrant
-        Returns the quadrants as a dictionary by color
-        """
-        with open(self.__quadrant_path) as f:
-            self.__quadrants = yaml.load(f)
-
-        for color in self.__quadrants:
-            for quadrant in self.__quadrants[color]:
-                quadrant.append(['wh', 0, 1])
-                quadrant.append(['wv', 1, 0])
-                quadrant.extend([['wh', i, 8] for i in range(8)])
-                quadrant.extend([['wv', 8, i] for i in range(8)])
+        self.__construct(quadrants)
+        self.__add_robots()
 
     def __is_target(self, name):
         return len(name) == 2 and name[0] in self.__colors and name[1] in self.__shapes
@@ -54,26 +38,29 @@ class Board:
     def __is_wall(self, name):
         return len(name) == 2 and name[0] == 'w'
 
-    def __is_redirect(self, name):
-        return len(name) == 2 and name[0] in self.__colors and name[1] in 'id'
-                
-    def __create_board(self):
+    def __can_place_at(self, x, y):
+        # Do not place in center or on top of another robot
+        if x == 7 or x == 8 or y == 7 or y == 8 or self.__robot_grid[y, x]:
+            return False
+        
+        # Do not place on top of target. We can do some numpy here but keep this simple.
+        for _, _, target_x, target_y in self.__target_list:
+            if target_x == x and target_y == y:
+                return False
+        return True
+        
+    def __construct(self, quadrants):
         """
         Prepare a board from a random select of each color's quadrant
         """
 
-        # Mark center 4 tiles as unavailable
-        self.__grid[7:9, 7:9] = 1 << self.__markers.index("")
-
         # Names of walls, useful for eventually flipping horizontal/vertical when we rotate
         wall_names = ['wh', 'wv']
-
-        # Keep track of the index in target we're currently on
         target_index = 0        
-
-        # Go through each color in a random order and add it to the board
         color_names = ['red', 'blue', 'green', 'yellow']
         random.shuffle(color_names)
+
+        # Loop through each color to populate each quadrants
         for color_i, color in enumerate(color_names):
 
             # Figure out the angle we're rotating by and the necessary offsets
@@ -85,77 +72,55 @@ class Board:
                                    [np.sin(rot), np.cos(rot)]], dtype=np.int64)
 
             # Pick a quadrant
-            num_quadrants = len(self.__quadrants[color]) - (1 - self.__include_redirects)
-            quadrant_index = np.random.randint(num_quadrants)
-            quadrant = self.__quadrants[color][quadrant_index]
+            quadrant_index = np.random.randint(len(quadrants[color]))
+            quadrant = quadrants[color][quadrant_index]
 
             # Populate targets, walls, and reflectors based on our need to rotate
             for name, x, y in quadrant:
+                
                 if self.__is_target(name):
-                    x, y = np.matmul(np.array([x, y]), rot_matrix) + offset + 8
-                    self.__grid[y, x] |= 1 << self.__markers.index(name)
-                    self.__targets[target_index, :] = [self.__colors.index(name[0]),
-                                                       self.__shapes.index(name[1]), x, y]
+                    color = self.__colors.index(name[0])
+                    shape = self.__shapes.index(name[1])
+                    dst_x, dst_y = np.matmul(np.array([x, y]), rot_matrix) + offset + 8
+                    self.__target_list[target_index, :] = (color, shape, dst_x, dst_y)
                     target_index += 1
+
                 elif self.__is_wall(name):
                     wall_i = (wall_names.index(name) + flip_walls) % 2
                     name = wall_names[wall_i] if flip_walls else name
                     xy = np.matmul(np.array([x, y]), rot_matrix) + 8
                     xy[wall_i] += offset[wall_i]
-                    x, y = xy
-                    if name == 'wh':
-                        if y < 16:
-                            self.__grid[y, x] |= 1 << self.__markers.index('wu')
-                        if y > 0:
-                            self.__grid[y - 1, x] |= 1 << self.__markers.index('wd')
-                    if name == 'wv':
-                        if x < 16:
-                            self.__grid[y, x] |= 1 << self.__markers.index('wl')
-                        if x > 0:
-                            self.__grid[y, x - 1] |= 1 << self.__markers.index('wr')
-                elif self.__is_redirect(name):
-                    x, y = np.matmul(np.array([x, y]), rot_matrix) + offset + 8
-                    if flip_walls:
-                        name = name[0] + ('i' if name[1] == 'd' else 'i')
-                    self.__grid[y, x] |= 1 << self.__markers.index(name)
-
+                    dst_x, dst_y = xy
+                    self.__wall_grids[name[1]][dst_y, dst_x] = 1
+                            
         # Make sure targets are not in predictable order
-        np.random.shuffle(self.__targets)
+        np.random.shuffle(self.__target_list)
 
-    def __populate_robots(self):
+    def __add_robots(self):
 
         # Populate robots in random positions not on a target
-        for i in range(len(self.__robots)):
+        for i in range(len(self.__robot_list)):
             
             # Find a location for the robot
             x, y = 8, 8
-            while self.__grid[y, x] >> 4:
+            while not self.__can_place_at(x, y):
                 x, y = np.random.randint(16, size=2)
 
             # Prepare new location
-            self.__robots[i, :] = (x, y)
-            self.__grid[y, x] |= 1 << self.__markers.index(self.__colors[i])
+            self.__robot_list[i, :] = (x, y)
 
-    def done(self):
-        return self.__turn >= len(self.__targets)
-
-    def next(self):
-        self.__turn += 1
-        self.__solution = None
-
-    def turn(self, turn):
-        self.__turn = turn
-        
-    def solve(self, solver):
-        color_i, shape_i, x, y = [int(x) for x in self.__targets[self.__turn]]
-        self.__solution = ricochet.solve(self.__grid, self.__robots, color_i, x, y,
-                                         self.__max_depth, solver)
-        if self.__solution is not None:
-            print("%2i" % len(self.__solution))
+    def solve(self, solver, turn):
+        color_i, shape_i, x, y = [int(x) for x in self.__target_list[turn]]
+        move_list = ricochet.solve(self.__robot_grid, self.__target_grid,
+                                   self.__wall_grids['h'], self.__wall_grids['v'],
+                                   self.__robot_list, color_i, x, y, self.__max_depth, solver)
+        if move_list is not None:
+            print("%2i" % len(move_list), move_list)
         else:
             print("N/A")
-
-    def plot(self, save_name='board'):
+        return move_list
+    
+    def plot(self, save_name='board', turn=0, move_list=None):
         fig = plt.gcf()
         ax = fig.add_subplot(111)
         ax.set_facecolor("gainsboro")
@@ -165,52 +130,41 @@ class Board:
         plt.tick_params(axis='y', left='off')
         fig.patch.set_facecolor('black')
         fig.set_size_inches(10, 10)
-        plt.axis([0, 16, 16, 0])
+        plt.axis([-0.05, 16.05, 16.05, -0.05])
         plt.xticks(np.arange(17), [])
         plt.yticks(np.arange(17), [])
         plt.grid()
 
         # Targets
-        for i, (color_i, shape_i, x, y) in enumerate(self.__targets):
-            alpha = 0.1
+        for i, (color_i, shape_i, x, y) in enumerate(self.__target_list):
+            alpha = 0.0625
             name = self.__colors[color_i] + self.__shapes[shape_i]
-            if i == self.__turn:
+            if i == turn:
                 alpha = 1
-                plt.plot(8, 8, name, ms=64)
+                plt.plot(8, 8, name, ms=64, alpha=0.5)
             plt.plot(x + 0.5, y + 0.5, name, alpha=alpha, ms=32, markeredgecolor='gray')
 
         # Robots
-        for i, (x, y) in enumerate(self.__robots):
+        for i, (x, y) in enumerate(self.__robot_list):
             plt.plot(x + 0.5, y + 0.5, self.__colors[i] + '*', ms=32, markeredgecolor='gray')
 
         # Walls
         for y in range(16):
+            plt.plot([y, y + 1], [0, 0], lw=4, color='gray')    
+            plt.plot([y, y + 1], [16, 16], lw=4, color='gray')    
+            plt.plot([0, 0], [y, y + 1], lw=4, color='gray')
+            plt.plot([16, 16], [y, y + 1], lw=4, color='gray')
             for x in range(16):
-                if self.__grid[y, x] & 1 << self.__markers.index('wu'):
+                if self.__wall_grids['h'][y, x]:
                     plt.plot([x, x + 1], [y, y], lw=4*(1+(y==0)), color='gray')    
-                if self.__grid[y, x] & 1 << self.__markers.index('wd'):
-                    plt.plot([x, x + 1], [y + 1, y + 1], lw=4*(1+(y==15)), color='gray')    
-                if self.__grid[y, x] & 1 << self.__markers.index('wl'):
+                if self.__wall_grids['v'][y, x]:
                     plt.plot([x, x], [y, y + 1], lw=4*(1+(x==0)), color='gray')
-                if self.__grid[y, x] & 1 << self.__markers.index('wr'):
-                    plt.plot([x + 1, x + 1], [y, y + 1], lw=4*(1+(x==15)), color='gray')
-
-        # Redirects
-        redirect_mask = ricochet.redirect_mask()
-        for y in range(16):
-            for x in range(16):
-                if self.__grid[y, x] & redirect_mask:
-                    for i, marker in enumerate(self.__markers):
-                        if len(marker) >= 2 and marker[1] == 'd' and self.__grid[y, x] & 1 << i:
-                            plt.plot([x, x + 1], [y, y+ 1], lw=4, color=marker[0], alpha=0.5)
-                        if len(marker) >= 2 and marker[1] == 'i' and self.__grid[y, x] & 1 << i:
-                            plt.plot([x, x + 1], [y + 1, y], lw=4, color=marker[0], alpha=0.5)
 
         # Path to solution
-        if self.__solution:
-            plt.text(8, 8,  str(len(self.__solution)), horizontalalignment='center',
+        if move_list:
+            plt.text(8, 8,  str(len(move_list)), horizontalalignment='center',
                      verticalalignment='center', fontsize=32, color='lightgray')
-            for robot_i, action_i, src_x, src_y, dst_x, dst_y in self.__solution:
+            for robot_i, action_i, src_x, src_y, dst_x, dst_y in move_list:
                 xs = [src_x + 0.5, dst_x + 0.5]
                 ys = [src_y + 0.5, dst_y + 0.5]
                 if src_x != dst_x and src_y != dst_y:
@@ -227,6 +181,25 @@ class Board:
         plt.savefig('%s.png' % save_name, bbox_inches='tight', dpi=100, facecolor='gainsboro')
         plt.close()
 
+def load_quadrants(path):
+    """
+    Loads the quadrants yaml and adds inner and outer walls to each quadrant
+    Returns the quadrants as a dictionary by color
+    """
+    with open(path) as f:
+        quadrants = yaml.load(f)
+
+    # clear redirects since we do not want to deal with them yet
+    for color in quadrants:
+        del quadrants[color][-1]
+
+    for color in quadrants:
+        for quadrant in quadrants[color]:
+            quadrant.append(['wh', 0, 1])
+            quadrant.append(['wv', 1, 0])
+
+    return quadrants
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--seed", type=int, default=-1,
@@ -234,8 +207,6 @@ if __name__ == "__main__":
     parser.add_argument("--max", type=int, default=12,
                         help="Maximum number of moves to try to solve in. More moves means that it"
                         "'s likely to take quadratically longer to solve board.")
-    parser.add_argument("--redirect", action="store_true",
-                        help="Alternate mode: possibly include board tiles that have redirects")
     parser.add_argument("--black", action="store_true",
                         help="Alternate mode: include a fifth robot")
     parser.add_argument("--path", type=str, default="config/quadrants.yaml",
@@ -245,18 +216,20 @@ if __name__ == "__main__":
                         "2 is breadth-first. 3 is bi-directional")
     args = parser.parse_args()
 
-    if args.seed >= 0:
-        random.seed(args.seed)
-        np.random.seed(args.seed)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
 
-    b = Board(args.max, args.black, args.redirect, args.path)
+    quadrants = load_quadrants(args.path)
+    
+    b = Board(quadrants, args.black)
+    b.plot('board')
+
     counter = 0
-    while not b.done():
+    for turn in range(17):
         print("Solving %2i:" % counter, end=' ')
         if args.plot:
-            b.plot('board_%02i_ready' % counter)
-        b.solve(args.solver)
+            b.plot('board_%02i_ready' % counter, turn)
+        move_list = None #b.solve(args.solver, turn)
         if args.plot:
-            b.plot('board_%02i_solved' % counter)
-        b.next()
+            b.plot('board_%02i_solved' % counter, turn, move_list)
         counter += 1
