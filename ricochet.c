@@ -19,10 +19,6 @@ typedef struct board_t {
   float *target_grid;
   float *wall_h_grid;
   float *wall_v_grid;
-  float *redirect_b_grid;
-  float *redirect_g_grid;
-  float *redirect_r_grid;
-  float *redirect_y_grid;
   int *robot_list;
   move_t *move_list;
   int n_moves;
@@ -34,40 +30,37 @@ static int GRID_WIDTH = 16;
 static int SOLVE_DFS = 1;
 static int SOLVE_GRAPH = 2;
 
-static int redirect_direction(int tile, int robot) {
-  int redirects = tile >> REDIRECT_OFFSET;
-  // If the robot is the same color as the redirect, just send the robot through
-  if (robot < 4 && ((redirects >> (robot * 2)) & 3)) {
-    return 0;
-  }
-  if ((redirects & REDIRECT_INCLINE) > 0) {
-    return 1;
-  }
-  return -1;
+
+int avail_up(const board_t* board, const move_t* move) {
+  int src_pos = move->dst_y * GRID_WIDTH + move->dst_x;
+  int dst_pos = (move->dst_y - 1) * GRID_WIDTH + move->dst_x;
+  return (move->dst_y > 0
+	  && board->wall_h_grid[src_pos] == 0
+	  && board->robot_grid[dst_pos] == 0);
 }
 
-int avail_up(const board_t* board, int x, int y, int robot) {
-  int src_pos = y * GRID_WIDTH + x;
-  int dst_pos = (y - 1) * GRID_WIDTH + x;
-  return y >= 0 && board->wall_h_grid[src_pos] == 0 && board->robot_grid[dst_pos] == 0;
+int avail_down(const board_t* board, const move_t* move) {
+  int src_pos = move->dst_y * GRID_WIDTH + move->dst_x;
+  int dst_pos = (move->dst_y + 1) * GRID_WIDTH + move->dst_x;
+  return (move->dst_y < (GRID_WIDTH - 1)
+	  && board->wall_h_grid[src_pos] == 0
+	  && board->robot_grid[dst_pos] == 0);
 }
 
-int avail_down(const board_t* board, int x, int y, int robot) {
-  int src_pos = y * GRID_WIDTH + x;
-  int dst_pos = (y + 1) * GRID_WIDTH + x;
-  return y < (GRID_WIDTH - 1) && board->wall_h_grid[dst_pos] == 0 && board->robot_grid[dst_pos] == 0;
+int avail_left(const board_t* board, const move_t* move) {
+  int src_pos = move->dst_y * GRID_WIDTH + move->dst_x;
+  int dst_pos = move->dst_y * GRID_WIDTH + move->dst_x - 1;
+  return (move->dst_x > 0
+	  && board->wall_v_grid[src_pos] == 0
+	  && board->robot_grid[dst_pos] == 0);
 }
 
-int avail_left(const board_t* board, int x, int y, int robot) {
-  int src_pos = y * GRID_WIDTH + x;
-  int dst_pos = y * GRID_WIDTH + x - 1;
-  return y >= 0 && board->wall_v_grid[src_pos] == 0 && board->robot_grid[dst_pos] == 0;
-}
-
-int avail_right(const board_t* board, int x, int y, int robot) {
-  int src_pos = y * GRID_WIDTH + x;
-  int dst_pos = y * GRID_WIDTH + x + 1;
-  return y < (GRID_WIDTH - 1) && board->wall_v_grid[dst_pos] == 0 && board->robot_grid[dst_pos] == 0;
+int avail_right(const board_t* board, const move_t* move) {
+  int src_pos = move->dst_y * GRID_WIDTH + move->dst_x;
+  int dst_pos = move->dst_y * GRID_WIDTH + move->dst_x + 1;
+  return (move->dst_x < (GRID_WIDTH - 1)
+	  && board->wall_v_grid[src_pos] == 0
+	  && board->robot_grid[dst_pos] == 0);
 }
 
 int can_move(const board_t *board, move_t *move) {
@@ -93,8 +86,8 @@ int can_move(const board_t *board, move_t *move) {
 }
 
 int move_robot(board_t *board, move_t *move) {
-  move->src_x = robot_list[move->robot * 2];
-  move->src_y = robot_list[move->robot * 2 + 1];
+  move->src_x = board->robot_list[move->robot * 2];
+  move->src_y = board->robot_list[move->robot * 2 + 1];
 
   // First make sure we can move
   int rc = can_move(board, move);
@@ -117,8 +110,8 @@ void unmove_robot(board_t *board, move_t *move) {
   int dst_pos = move->dst_y * GRID_WIDTH + move->dst_x;
   board->robot_grid[src_pos] = board->robot_grid[dst_pos];
   board->robot_grid[dst_pos] = 0;
-  robot_list[move->robot * 2] = move->src_x;
-  robot_list[move->robot * 2 + 1] = move->src_y;
+  board->robot_list[move->robot * 2] = move->src_x;
+  board->robot_list[move->robot * 2 + 1] = move->src_y;
 }
 
 void execute_move_list(board_t *board, move_t* move_list, int n_moves) {
@@ -147,12 +140,13 @@ PyObject* build_move_list(const move_t* move_list, int n_moves) {
  
 static int is_solution(board_t *board, int n_robots, int target_robot, int target_x, int target_y) {
   if (target_robot < 4) {
-    return robot_list[target_robot * 2] == target_x && robot_list[target_robot * 2 + 1] == target_y;
+    return (board->robot_list[target_robot * 2] == target_x
+	    && board->robot_list[target_robot * 2 + 1] == target_y);
   }
   
   int solution_found = 0;
   for (int i = 0; i < n_robots; ++i) {
-    solution_found |= robot_list[i * 2] == target_x && robot_list[i * 2 + 1] == target_y;
+    solution_found |= board->robot_list[i * 2] == target_x && board->robot_list[i * 2 + 1] == target_y;
   }
   return solution_found;
 }
@@ -160,35 +154,36 @@ static int is_solution(board_t *board, int n_robots, int target_robot, int targe
 static void dfs_solver(board_t *board, int *max_depth, move_t *out_move_list,
 		       float *n_out_moves, float *robot_order, int n_robots,
 		       int target_robot, int target_x, int target_y) {
-  move_list[0].robot_order_i = 0;
-  move_list[0].robot = robot_order[0];
-  move_list[0].action = -1;
+  out_move_list[0].robot_order_i = 0;
+  out_move_list[0].robot = robot_order[0];
+  out_move_list[0].action = -1;
 
   // Dive depth-first to try every combination of moves
+  int n_moves = 0;
   while (n_moves >= 0) {
 
     // Verify a robot-action pair isn't out of bounds
-    move_list[n_moves].action++;
-    if (move_list[n_moves].action >= N_ACTIONS) {
-      move_list[n_moves].robot_order_i++;
-      if (move_list[n_moves].robot_order_i >= n_robots) {
-	if (--n_moves >= 0) unmove_robot(board, &(move_list[n_moves]));
+    out_move_list[n_moves].action++;
+    if (out_move_list[n_moves].action >= N_ACTIONS) {
+      out_move_list[n_moves].robot_order_i++;
+      if (out_move_list[n_moves].robot_order_i >= n_robots) {
+	if (--n_moves >= 0) unmove_robot(board, &(out_move_list[n_moves]));
 	continue;
       }
-      move_list[n_moves].robot = robot_order[move_list[n_moves].robot_order_i];
-      move_list[n_moves].action = 0;
+      out_move_list[n_moves].robot = robot_order[out_move_list[n_moves].robot_order_i];
+      out_move_list[n_moves].action = 0;
     }
     
     // Try to move, if we can't skip
-    if (move_robot(board, &(move_list[n_moves]))) {
+    if (move_robot(board, &(out_move_list[n_moves]))) {
       continue;
     }
 
     // Skip if we already been in this location
-    if (n_moves >= 1 && move_list[n_moves - 1].robot == move_list[n_moves].robot &&
-	move_list[n_moves - 1].src_x == move_list[n_moves].dst_x &&
-	move_list[n_moves - 1].src_y == move_list[n_moves].dst_y) {
-      unmove_robot(board, &(move_list[n_moves]));
+    if (n_moves >= 1 && out_move_list[n_moves - 1].robot == out_move_list[n_moves].robot &&
+	out_move_list[n_moves - 1].src_x == out_move_list[n_moves].dst_x &&
+	out_move_list[n_moves - 1].src_y == out_move_list[n_moves].dst_y) {
+      unmove_robot(board, &(out_move_list[n_moves]));
       continue;
     }
 
@@ -201,7 +196,7 @@ static void dfs_solver(board_t *board, int *max_depth, move_t *out_move_list,
       // If this is the first solution or shorter than any other, store it
       if (*n_out_moves < 0 || n_moves < *n_out_moves) {
 	*n_out_moves = n_moves;
-	memcpy(out_move_list, move_list, *n_out_moves * sizeof(move_t));
+	memcpy(out_out_move_list, out_move_list, *n_out_moves * sizeof(move_t));
       }
 
       // Update the acceptable depth
@@ -211,15 +206,15 @@ static void dfs_solver(board_t *board, int *max_depth, move_t *out_move_list,
     // If we're beyond our depth or out of robots/actions to try for this combination, go back
     if (n_moves >= *max_depth) {
       if (n_moves > 0) {
-	unmove_robot(board, &(move_list[--n_moves]));
+	unmove_robot(board, &(out_move_list[--n_moves]));
 	continue;
       }
       break;
     }
     
-    move_list[n_moves].robot_order_i = 0;
-    move_list[n_moves].robot = robot_order[move_list[n_moves].robot_order_i];
-    move_list[n_moves].action = -1;    
+    out_move_list[n_moves].robot_order_i = 0;
+    out_move_list[n_moves].robot = robot_order[out_move_list[n_moves].robot_order_i];
+    out_move_list[n_moves].action = -1;    
   }
 }
 
@@ -228,7 +223,7 @@ static void dfs_driver(board_t *board, float *max_depth,
 		       float *robot_order, int n_robots,
 		       int target_robot, int target_x, int target_y) {
   int n = 1;
-  dfs_solver(board, robot_list, move_list, max_depth, out_move_list, n_out_moves,
+  dfs_solver(board, max_depth, out_move_list, n_out_moves,
 	     robot_order, n, target_robot, target_x, target_y);
 
   // Solve for every combination of 2 robots
@@ -236,7 +231,7 @@ static void dfs_driver(board_t *board, float *max_depth,
   for (int i = 0; i < n_robots; ++i) {
     if (i != robot_order[0]) {
       robot_order[1] = i;
-      dfs_solver(board, robot_list, move_list, max_depth, out_move_list, n_out_moves,
+      dfs_solver(board, max_depth, out_move_list, n_out_moves,
 		 robot_order, n, target_robot, target_x, target_y);
     }
   }
@@ -249,7 +244,7 @@ static void dfs_driver(board_t *board, float *max_depth,
       for (int j = i + 1; j < n_robots; ++j) {
 	if (j != robot_order[0]) {
 	  robot_order[2] = j;
-	  dfs_solver(board, robot_list, move_list, max_depth, out_move_list, n_out_moves,
+	  dfs_solver(board, max_depth, out_move_list, n_out_moves,
 		     robot_order, n, target_robot, target_x, target_y);
 	}
       }
@@ -261,28 +256,18 @@ static void dfs_driver(board_t *board, float *max_depth,
   for (int i = 0; i < n_robots; ++i)
     if (i != target_robot)
       robot_order[i + (i < target_robot)] = i;
-  dfs_solver(board, robot_list, move_list, max_depth, out_move_list, n_out_moves,
+  dfs_solver(board, max_depth, out_move_list, n_out_moves,
 	     robot_order, n, target_robot, target_x, target_y);
 }
 
-static void graph_driver(board_t *board, float *max_depth,
-			 move_t *out_move_list, float *n_out_moves,
-			 float *robot_order, int n_robots,
-			 int target_robot, int target_x, int target_y) {
-  
-}
-
-static char ricochet_solve_docstring[] = "usage: solve(robot_grid, target_grid, wall_h_grid, wall_v_grid, redirect_b_grid, redirect_g_grid, redirect_r_grid, redirect_y_grid, robot_list, target_robot, target_x, target_y, max_depth)";
+static char ricochet_solve_docstring[] = "usage: solve(robot_grid, target_grid, wall_h_grid, wall_v_grid, robot_list, target_robot, target_x, target_y, max_depth)";
 static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
 
   // Process Arguments
   PyArrayObject *robot_grid_obj, *target_grid_obj, *wall_h_grid, *wall_v_grid, *robot_list_obj;
-  PyArrayObject *redirect_b_grid_obj, *redirect_g_grid_obj, *redirect_r_grid_obj, *redirect_y_grid_obj;
   int target_robot, target_x, target_y, max_depth, solver;
   if (!PyArg_ParseTuple(args, "OOOOOOOOOlllll",
 			&robot_grid_obj, &target_grid_obj, &wall_h_grid_obj, &wall_v_grid_obj,
-			&redirect_b_grid_obj, &redirect_g_grid_obj,
-			&redirect_r_grid_obj, &redirect_y_grid_obj,
 		        &robot_list_obj, &target_robot,	&target_x, &target_y, &max_depth, &solver))
     return NULL;
 
@@ -292,10 +277,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   board.target_grid = (float*) PyArray_DATA(target_grid_obj);
   board.wall_h_grid = (float*) PyArray_DATA(wall_h_grid_obj);
   board.wall_v_grid = (float*) PyArray_DATA(wall_v_grid_obj);
-  board.redirect_b_grid = (float*) PyArray_DATA(redirect_b_grid_obj);
-  board.redirect_g_grid = (float*) PyArray_DATA(redirect_g_grid_obj);
-  board.redirect_r_grid = (float*) PyArray_DATA(redirect_r_grid_obj);
-  board.redirect_y_grid = (float*) PyArray_DATA(redirect_y_grid_obj);
   board.robot_list = (float*) PyArray_DATA(robot_list_obj);
   board.n_robots = PyArray_DIM(robot_list_obj, 0);
   board.move_list = (move_t*) malloc(max_depth * sizeof(move_t));
@@ -314,10 +295,6 @@ static PyObject *ricochet_solve(PyObject *self, PyObject *args) {
   if (solver == SOLVE_DFS) {
     dfs_driver(&board, move_list, &max_depth, out_move_list, &n_out_move_list,
 	       robot_order, n_robots, target_robot, target_x, target_y);
-  }
-  else if (solver == SOLVE_GRAPH) {
-    graph_driver(&board, &max_depth, out_move_list, &n_out_move_list,
-		 robot_order, n_robots, target_robot, target_x, target_y);
   }
   
   execute_move_list(&board, out_move_list, n_out_moves);
